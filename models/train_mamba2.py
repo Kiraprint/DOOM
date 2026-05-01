@@ -10,11 +10,16 @@ Usage:
 import sys
 import functools
 from pathlib import Path
+from datetime import datetime
+from types import SimpleNamespace
 
 # Add project root to path for imports
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+# Timestamp for log naming
+TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 from models.mamba2_core import register_mamba2, MAMBA_AVAILABLE
 from sample_factory.algo.utils.context import global_model_factory
@@ -44,42 +49,73 @@ def main():
     # Register Mamba-2 core
     register_mamba2()
 
-    # Parse config matching original command params
+    # Mamba-2 specific settings (MUST be set before parsing to ensure correct rnn_size)
+    cfg_rnn_num_layers = 2  # Increased from 1 for better temporal reasoning
+    cfg_mamba_d_state = 16
+    cfg_mamba_d_conv = 4
+    cfg_mamba_expand = 2
+    cfg_mamba_headdim = 32
+    cfg_mamba_ngroups = 1
+    cfg_mamba_d_model = 512  # Increased from 256 for better representation
+
+    # Calculate required rnn_size before parsing
+    from models.mamba2_core import get_mamba2_required_rnn_size
+    temp_cfg = SimpleNamespace(
+        rnn_size=cfg_mamba_d_model,
+        rnn_num_layers=cfg_rnn_num_layers,
+        mamba_d_model=cfg_mamba_d_model,
+        mamba_d_state=cfg_mamba_d_state,
+        mamba_d_conv=cfg_mamba_d_conv,
+        mamba_expand=cfg_mamba_expand,
+        mamba_headdim=cfg_mamba_headdim,
+        mamba_ngroups=cfg_mamba_ngroups,
+    )
+    required_rnn_size = get_mamba2_required_rnn_size(temp_cfg)
+
+    # Parse config with correct rnn_size
     argv = [
         '--env', 'doom_benchmark',
         '--algo', 'APPO',
-        '--experiment', 'doom_battle_mamba2_50m',
-        '--train_for_env_steps', '50000000',
-        '--num_workers', '10',
-        '--num_envs_per_worker', '32',
+        '--experiment', f'doom_battle_mamba2_v2_250m_{TIMESTAMP}',
+        '--train_for_env_steps', '250000000',
+        '--num_workers', '8',
+        '--num_envs_per_worker', '16',
         '--batch_size', '4096',
         '--num_policies', '1',
         '--policy_workers_per_policy', '2',
         '--worker_num_splits', '2',
+        '--rnn_size', str(required_rnn_size),  # Set here so sample-factory allocates correct buffer
     ]
     parser, _ = parse_sf_args(argv=argv)
     add_doom_env_args(parser)
     doom_override_defaults(parser)
     cfg = parse_full_cfg(parser, argv)
 
-    # Mamba-2 specific settings
+    # Apply Mamba-2 settings
     cfg.rnn_type = 'mamba2'
+    cfg.mamba_d_state = cfg_mamba_d_state
+    cfg.mamba_d_conv = cfg_mamba_d_conv
+    cfg.mamba_expand = cfg_mamba_expand
+    cfg.mamba_headdim = cfg_mamba_headdim
+    cfg.mamba_ngroups = cfg_mamba_ngroups
+    cfg.mamba_d_model = cfg_mamba_d_model
+
+    # CRITICAL: Store actual Mamba layer count before overriding rnn_num_layers.
+    # Sample Factory's get_rnn_size() multiplies rnn_size * rnn_num_layers for buffer
+    # allocation. Mamba2Core already encodes all layers into rnn_size, so we must set
+    # rnn_num_layers=1 to prevent double-counting. Mamba2Core reads mamba_num_layers
+    # for its internal layer count.
+    cfg.mamba_num_layers = cfg_rnn_num_layers
     cfg.rnn_num_layers = 1
-    cfg.mamba_d_state = 16
-    cfg.mamba_d_conv = 4
-    cfg.mamba_expand = 2
-    cfg.mamba_headdim = 32
-    cfg.mamba_ngroups = 1
 
-    # d_model (computation dimension) is separate from rnn_size (state storage)
-    # core_output_size stays at d_model for decoder compatibility
-    cfg.mamba_d_model = 256  # Computation dimension
-    cfg.rnn_size = cfg.mamba_d_model  # Set first for calculation
+    print(f"  Mamba-2 d_model: {cfg.mamba_d_model}, rnn_size: {cfg.rnn_size} (required: {required_rnn_size})")
 
-    from models.mamba2_core import get_mamba2_required_rnn_size
-    required_size = get_mamba2_required_rnn_size(cfg)
-    cfg.rnn_size = max(cfg.rnn_size, required_size)
-    print(f"  Mamba-2 d_model: {cfg.mamba_d_model}, rnn_size: {cfg.rnn_size} (required: {required_size})")
+    # Entropy coefficient skipped - requires environment-specific tuning
+    # cfg.entropy_coef = 0.01  # Uncomment if needed after testing
+
+    # Verify rnn_size matches what sample-factory will allocate
+    print(f"  Final rnn_size: {cfg.rnn_size} (required: {required_rnn_size})")
+    assert cfg.rnn_size >= required_rnn_size, f"rnn_size too small: {cfg.rnn_size} < {required_rnn_size}"
 
     print(f"\nStarting Mamba-2 training on {cfg.env}")
     print(f"  Algorithm: {cfg.algo}")
