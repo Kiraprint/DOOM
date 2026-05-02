@@ -263,6 +263,14 @@ class Mamba2Core(ModelCore):
                 f"d_conv={self.d_conv}, expand={self.expand}, headdim={self.headdim}"
             )
 
+        # Log state size for debugging
+        import logging
+        logging.info(
+            f"Mamba2Core: d_model={self.d_model}, num_layers={self.num_layers}, "
+            f"state_size_per_layer={self.state_encoder.total_size}, "
+            f"required_rnn_size={required_rnn_size}, cfg.rnn_size={cfg.rnn_size}"
+        )
+
         # Build stacked Mamba-2 blocks with pre-norm LayerNorm + residual connections
         # Pre-norm + residual is critical: Mamba-2 has no internal gating like GRU,
         # so without residuals, gradients vanish and the model cannot learn effectively.
@@ -392,6 +400,7 @@ class Mamba2Core(ModelCore):
                     )
                 else:
                     conv_decoded, ssm_decoded = self.state_encoder.decode(layer_flat)
+                    # Ensure dtype matches to avoid precision loss
                     conv_state.copy_(conv_decoded.to(conv_state.dtype))
                     ssm_state.copy_(ssm_decoded.to(ssm_state.dtype))
 
@@ -467,7 +476,8 @@ class Mamba2Core(ModelCore):
             # CRITICAL: seqlen_offset > 0 is required for state persistence.
             # With seqlen_offset = 0, mamba_ssm uses the regular forward path which
             # does NOT use cached state for single-timestep input (model becomes stateless).
-            inference_params.seqlen_offset = 1
+            # Using train_horizon ensures we're always in step mode regardless of episode length.
+            inference_params.seqlen_offset = max_seqlen
 
             # Forward through each layer with inference params (residual connection)
             for norm, wrapped in zip(self.mamba_norms, self.mamba_wrapped):

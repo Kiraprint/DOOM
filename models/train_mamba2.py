@@ -117,6 +117,16 @@ def main():
     print(f"  Final rnn_size: {cfg.rnn_size} (required: {required_rnn_size})")
     assert cfg.rnn_size >= required_rnn_size, f"rnn_size too small: {cfg.rnn_size} < {required_rnn_size}"
 
+    # Mamba-2 is more sensitive to learning rate than GRU.
+    # Lower LR prevents gradient explosion and improves stability.
+    cfg.learning_rate = 5e-5
+
+    # Increase max_grad_norm — Mamba-2 can have larger gradients
+    cfg.max_grad_norm = 10.0
+
+    # Use constant LR schedule — Mamba-2 benefits from stable LR
+    cfg.lr_schedule = "constant"
+
     print(f"\nStarting Mamba-2 training on {cfg.env}")
     print(f"  Algorithm: {cfg.algo}")
     print(f"  RNN type: {cfg.rnn_type} (d_model={cfg.mamba_d_model}, rnn_size={cfg.rnn_size})")

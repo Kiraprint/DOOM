@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Parse Sample Factory train logs and plot episode reward over environment steps."""
 
-import glob
 import os
 import sys
 
@@ -14,6 +13,25 @@ from tensorboard.backend.event_processing import event_accumulator
 TRAIN_DIR = "/home/kir/Code/DOOM/train_dir"
 MAX_STEPS_DEFAULT = 50_000_000  # 50M for doom_battle_appo runs
 SMOOTH_WINDOW = 20              # running-mean window for smoothing
+
+# Directories to skip
+SKIP_DIRS = {"doom_battle_mamba2_v2_50m"}
+
+# Prefer 250M runs when available, fall back to 50M
+PREFERRED_RUNS = {
+    "GRU": ["doom_battle_appo_gru_250m"],
+    "Мамба-1": ["doom_battle_mamba1_v2_50m"],
+    "Мамба-2": ["doom_battle_mamba2_v2_250m_20260501_194228"],
+}
+
+# Map directory names to short legend labels
+LEGEND_MAP = {
+    "doom_battle_appo_gru_250m": "GRU",
+    "doom_battle_appo_gru_50m": "GRU",
+    "doom_battle_mamba1_v2_50m": "Мамба-1",
+    "doom_battle_mamba2_250m": "Мамба-2",
+    "doom_battle_mamba2_50m": "Мамба-2",
+}
 
 
 def parse_event_files(summary_dir: str) -> tuple[list[int], list[float]]:
@@ -51,7 +69,15 @@ def main():
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    for run_name in runs:
+    for label, candidates in PREFERRED_RUNS.items():
+        run_name = None
+        for c in candidates:
+            if c in runs:
+                run_name = c
+                break
+        if not run_name:
+            continue
+
         summary_path = os.path.join(TRAIN_DIR, run_name, ".summary", "0")
         if not os.path.isdir(summary_path):
             continue
@@ -62,8 +88,13 @@ def main():
             print(f"Skipping {run_name}: {e}")
             continue
 
-        # For default doom_battle_appo runs, cap at 50M steps
-        max_steps = MAX_STEPS_DEFAULT if "doom_battle_appo" in run_name else None
+        # Cap at 250M for 250m runs, 50M for 50m runs
+        if "250m" in run_name:
+            max_steps = 250_000_000
+        elif "50m" in run_name:
+            max_steps = MAX_STEPS_DEFAULT
+        else:
+            max_steps = None
         if max_steps:
             mask = np.array(steps) <= max_steps
             steps = list(np.array(steps)[mask])
@@ -75,12 +106,11 @@ def main():
             steps = steps[:len(smooth)]
             rewards = smooth
 
-        label = run_name
         ax.plot(steps, rewards, label=label, linewidth=1.5)
 
-    ax.set_xlabel("Environment Steps")
-    ax.set_ylabel("Avg Episode Reward")
-    ax.set_title("Training Progress — Episode Reward")
+    ax.set_xlabel("Шаги среды")
+    ax.set_ylabel("Средняя награда эпизода")
+    ax.set_title("Прогресс обучения — Награда эпизода")
     ax.legend()
     ax.grid(True, alpha=0.3)
 
