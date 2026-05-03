@@ -51,11 +51,12 @@ def main():
         '--train_for_env_steps', '50000000',
         '--num_workers', '4',
         '--num_envs_per_worker', '16',
-        '--batch_size', '4096',
+        '--batch_size', '2048',  # Reduced for stability
         '--num_policies', '1',
         '--policy_workers_per_policy', '2',
         '--worker_num_splits', '2',
-        '--rnn_num_layers', '4',
+        '--rnn_num_layers', '1',  # Start with 1 layer
+        '--learning_rate', '1.5e-4',  # Lower LR for Mamba-2 stability
     ]
     parser, _ = parse_sf_args(argv=argv)
     add_doom_env_args(parser)
@@ -64,7 +65,7 @@ def main():
 
     # Mamba-2 specific settings (MUST be before register_mamba2 so cfg is frozen)
     cfg.rnn_type = 'mamba2'
-    cfg.rnn_num_layers = 2  # Research-backed: fewer layers more stable
+    cfg.rnn_num_layers = 1  # Start with 1 layer for maximum stability
     cfg.mamba_d_state = 64  # Conservative, stable
     cfg.mamba_d_conv = 4
     cfg.mamba_expand = 1  # RLBenchNet found expand=1 works for Atari
@@ -87,6 +88,9 @@ def main():
     # when allocating buffers. So rnn_size must be per-layer, not total.
     cfg.rnn_size = max(cfg.rnn_size, required_size)
     print(f"  Mamba-2 d_model: {cfg.mamba_d_model}, rnn_size (per-layer): {cfg.rnn_size} (total: {required_size * cfg.rnn_num_layers})")
+
+    # CRITICAL: Weight decay prevents B/C norm divergence in Mamba-2
+    cfg.weight_decay = 0.1
 
     print(f"\nStarting Mamba-2 training on {cfg.env}")
     print(f"  Algorithm: {cfg.algo}")
