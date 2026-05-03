@@ -219,6 +219,8 @@ class Mamba2Core(ModelCore):
         # d_model is the computation dimension (separate from rnn_size)
         # rnn_size must be >= encoded state size for inference
         self.d_model = getattr(cfg, 'mamba_d_model', cfg.rnn_size)
+        # cfg.rnn_num_layers is overridden by the pickled factory before this
+        # line runs, so it always has the correct registration-time value.
         self.num_layers = cfg.rnn_num_layers
 
         # Mamba-2 specific parameters with sensible defaults for RL
@@ -252,12 +254,13 @@ class Mamba2Core(ModelCore):
             d_conv=self.d_conv,
         )
 
-        # Verify rnn_size is large enough for all layers
-        required_rnn_size = self.state_encoder.total_size * self.num_layers
-        if cfg.rnn_size < required_rnn_size:
+        # Verify rnn_size is large enough per layer.
+        # sample-factory multiplies rnn_size * rnn_num_layers for buffer allocation.
+        required_per_layer = self.state_encoder.total_size
+        if cfg.rnn_size < required_per_layer:
             raise ValueError(
                 f"rnn_size ({cfg.rnn_size}) is too small for Mamba-2 state. "
-                f"Minimum required: {required_rnn_size}. "
+                f"Minimum required per layer: {required_per_layer}. "
                 f"Current config: d_model={self.d_model}, d_state={self.d_state}, "
                 f"d_conv={self.d_conv}, expand={self.expand}, headdim={self.headdim}"
             )
@@ -266,7 +269,7 @@ class Mamba2Core(ModelCore):
         # Pre-norm is more stable for RL training than post-norm
         self.mamba_wrapped = nn.ModuleList()
         self.mamba_norms = nn.ModuleList()
-        self.mamba_layers = nn.Sequential()
+        self.mamba_layers = nn.ModuleList()
 
         for i in range(self.num_layers):
             norm = nn.LayerNorm(self.d_model)
@@ -281,7 +284,7 @@ class Mamba2Core(ModelCore):
             wrapped = Mamba2WithCache(block, layer_idx=i)
             self.mamba_wrapped.append(wrapped)
             self.mamba_norms.append(norm)
-            self.mamba_layers.add_module(str(i), nn.Sequential(norm, wrapped))
+            self.mamba_layers.append(nn.Sequential(norm, wrapped))
 
         # Input projection: encoder output may differ from mamba's d_model
         if input_size != self.d_model:
@@ -289,8 +292,7 @@ class Mamba2Core(ModelCore):
         else:
             self.input_proj = nn.Identity()
 
-        # Output size for decoder (d_model, not rnn_size)
-        # rnn_size is used for state storage, d_model for computation
+        # core_output_size is d_model for decoder compatibility
         self.core_output_size = self.d_model
 
         # Inference params are transient - created fresh each inference call.
@@ -305,9 +307,7 @@ class Mamba2Core(ModelCore):
         from torch.utils.checkpoint import checkpoint
 
         def segment_forward(x, norm, mamba_layer):
-            x = norm(x)
-            x = mamba_layer(x)
-            return x
+            return mamba_layer(norm(x))
 
         output = x
         for norm, wrapped in zip(self.mamba_norms, self.mamba_wrapped):
@@ -469,8 +469,7 @@ class Mamba2Core(ModelCore):
 
             # Forward through each layer with inference params
             for norm, wrapped in zip(self.mamba_norms, self.mamba_wrapped):
-                x_data = norm(x_data)
-                x_data = wrapped(x_data, inference_params=inference_params)
+                x_data = wrapped(norm(x_data), inference_params=inference_params)
 
             # Encode updated state back into new_rnn_states
             new_rnn_states = self._get_inference_states(inference_params)
@@ -485,7 +484,7 @@ class Mamba2Core(ModelCore):
             # During training, return rnn_states unchanged
             new_rnn_states = rnn_states
         else:
-            x = x_data.squeeze(0)
+            x = x_data.squeeze(0)  # (batch, rnn_size)
 
         return x, new_rnn_states
 
@@ -499,41 +498,53 @@ def make_mamba2_core(cfg: Config, input_size: int) -> ModelCore:
 _MAMBA2_REGISTERED = False
 
 
-def register_mamba2():
+class Mamba2Factory:
+    """Picklable factory that remembers rnn_num_layers at registration time.
+
+    Module-level globals are NOT shared across subprocesses — each worker
+    imports the module fresh.  By using a callable class instance, the
+    captured value travels with the pickled factory.
+    """
+    __slots__ = ('_num_layers',)
+    def __init__(self, num_layers):
+        self._num_layers = num_layers
+    def __call__(self, cfg, core_input_size):
+        from sample_factory.model.core import default_make_core_func
+        if cfg.use_rnn and getattr(cfg, 'rnn_type', 'gru') == 'mamba2':
+            # Override cfg so Mamba2Core always sees the correct value
+            cfg.rnn_num_layers = self._num_layers
+            return Mamba2Core(cfg, core_input_size)
+        return default_make_core_func(cfg, core_input_size)
+
+
+def register_mamba2(cfg=None):
     """
     Register Mamba-2 as a valid rnn_type option.
 
     Call this once during initialization:
         from models.mamba2_core import register_mamba2
-        register_mamba2()
+        register_mamba2(cfg)   # pass cfg so rnn_num_layers is captured
     """
     global _MAMBA2_REGISTERED
     if _MAMBA2_REGISTERED:
         return
 
-    from sample_factory.algo.utils.context import global_model_factory
+    num_layers = cfg.rnn_num_layers if cfg is not None else 1
+    factory = Mamba2Factory(num_layers)
 
-    global_model_factory().register_model_core_factory(make_core_with_mamba)
+    from sample_factory.algo.utils.context import global_model_factory
+    global_model_factory().register_model_core_factory(factory)
 
     _MAMBA2_REGISTERED = True
-    print(f"[Mamba2] Registered as rnn_type='mamba2'")
-
-
-# Top-level factory function that can be pickled by multiprocessing
-def make_core_with_mamba(cfg, core_input_size):
-    """Factory function that checks rnn_type and creates appropriate core."""
-    from sample_factory.model.core import default_make_core_func
-
-    if cfg.use_rnn and getattr(cfg, 'rnn_type', 'gru') == 'mamba2':
-        return Mamba2Core(cfg, core_input_size)
-    return default_make_core_func(cfg, core_input_size)
+    print(f"[Mamba2] Registered as rnn_type='mamba2'  (num_layers={num_layers})")
 
 
 def get_mamba2_required_rnn_size(cfg: Config) -> int:
     """
-    Calculate minimum rnn_size required for Mamba-2 state encoding.
+    Calculate minimum per-layer rnn_size required for Mamba-2 state encoding.
 
-    Use this to validate config before training.
+    Returns per-layer size. sample-factory multiplies by rnn_num_layers
+    internally, so the effective total will be per_layer * num_layers.
     """
     d_model = getattr(cfg, 'mamba_d_model', cfg.rnn_size)
     d_state = getattr(cfg, 'mamba_d_state', 16)
@@ -541,7 +552,6 @@ def get_mamba2_required_rnn_size(cfg: Config) -> int:
     expand = getattr(cfg, 'mamba_expand', 2)
     headdim = getattr(cfg, 'mamba_headdim', 64)
     ngroups = getattr(cfg, 'mamba_ngroups', 1)
-    num_layers = cfg.rnn_num_layers
 
     # nheads is computed from d_ssm, not d_model
     d_inner = int(expand * d_model)
@@ -549,4 +559,4 @@ def get_mamba2_required_rnn_size(cfg: Config) -> int:
     d_conv_dim = d_inner + 2 * ngroups * d_state
 
     encoder = Mamba2StateEncoder(d_inner, d_conv_dim, nheads, headdim, d_state, d_conv)
-    return encoder.total_size * num_layers
+    return encoder.total_size  # per-layer only

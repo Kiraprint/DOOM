@@ -10,6 +10,7 @@ Usage:
 import sys
 import functools
 from pathlib import Path
+from datetime import datetime
 
 # Add project root to path for imports
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -41,45 +42,51 @@ def main():
     # Register Doom encoder
     global_model_factory().register_encoder_factory(make_vizdoom_encoder)
 
-    # Register Mamba-2 core
-    register_mamba2()
-
-    # Parse config matching original command params
+    # Parse config
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
     argv = [
         '--env', 'doom_benchmark',
         '--algo', 'APPO',
-        '--experiment', 'doom_battle_mamba2_50m',
+        '--experiment', f'doom_battle_mamba2_50m_{ts}',
         '--train_for_env_steps', '50000000',
-        '--num_workers', '10',
-        '--num_envs_per_worker', '32',
+        '--num_workers', '4',
+        '--num_envs_per_worker', '16',
         '--batch_size', '4096',
         '--num_policies', '1',
         '--policy_workers_per_policy', '2',
         '--worker_num_splits', '2',
+        '--rnn_num_layers', '4',
     ]
     parser, _ = parse_sf_args(argv=argv)
     add_doom_env_args(parser)
     doom_override_defaults(parser)
     cfg = parse_full_cfg(parser, argv)
 
-    # Mamba-2 specific settings
+    # Mamba-2 specific settings (MUST be before register_mamba2 so cfg is frozen)
     cfg.rnn_type = 'mamba2'
-    cfg.rnn_num_layers = 1
-    cfg.mamba_d_state = 16
+    cfg.rnn_num_layers = 2  # Research-backed: fewer layers more stable
+    cfg.mamba_d_state = 64  # Conservative, stable
     cfg.mamba_d_conv = 4
-    cfg.mamba_expand = 2
-    cfg.mamba_headdim = 32
-    cfg.mamba_ngroups = 1
+    cfg.mamba_expand = 1  # RLBenchNet found expand=1 works for Atari
+    cfg.mamba_headdim = 64  # Standard head dimension
+    cfg.mamba_ngroups = 1  # CRITICAL: prevents gradient explosion
+    cfg.mamba_d_model = 512  # Research-backed optimal
+
+    # Register Mamba-2 core — passes cfg so rnn_num_layers is frozen
+    register_mamba2(cfg)
 
     # d_model (computation dimension) is separate from rnn_size (state storage)
     # core_output_size stays at d_model for decoder compatibility
-    cfg.mamba_d_model = 256  # Computation dimension
     cfg.rnn_size = cfg.mamba_d_model  # Set first for calculation
 
     from models.mamba2_core import get_mamba2_required_rnn_size
     required_size = get_mamba2_required_rnn_size(cfg)
+
+    # get_mamba2_required_rnn_size returns per-layer size.
+    # sample-factory's get_rnn_size() multiplies rnn_size * rnn_num_layers
+    # when allocating buffers. So rnn_size must be per-layer, not total.
     cfg.rnn_size = max(cfg.rnn_size, required_size)
-    print(f"  Mamba-2 d_model: {cfg.mamba_d_model}, rnn_size: {cfg.rnn_size} (required: {required_size})")
+    print(f"  Mamba-2 d_model: {cfg.mamba_d_model}, rnn_size (per-layer): {cfg.rnn_size} (total: {required_size * cfg.rnn_num_layers})")
 
     print(f"\nStarting Mamba-2 training on {cfg.env}")
     print(f"  Algorithm: {cfg.algo}")
