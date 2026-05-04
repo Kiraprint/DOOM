@@ -57,6 +57,9 @@ def main():
         '--worker_num_splits', '2',
         '--rnn_num_layers', '1',  # Start with 1 layer
         '--learning_rate', '1.5e-4',  # Lower LR for Mamba-2 stability
+        '--lr_schedule', 'linear_decay',  # Decay LR to reduce oscillation
+        '--lr_warmup_steps', '2000',  # Warmup before decay
+        '--exploration_loss_coeff', '0.01',  # Higher entropy for stable exploration
     ]
     parser, _ = parse_sf_args(argv=argv)
     add_doom_env_args(parser)
