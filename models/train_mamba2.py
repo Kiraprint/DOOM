@@ -57,8 +57,8 @@ def main():
         '--worker_num_splits', '2',
         '--rnn_num_layers', '1',  # Start with 1 layer
         '--learning_rate', '1.5e-4',  # Lower LR for Mamba-2 stability
-        '--lr_schedule', 'linear_decay',  # Decay LR to reduce oscillation
-        '--lr_warmup_steps', '2000',  # Warmup before decay
+        '--lr_schedule', 'kl_adaptive_epoch',  # Adaptive LR based on KL divergence
+        '--lr_schedule_kl_threshold', '0.008',  # Lower threshold for more aggressive decay
         '--exploration_loss_coeff', '0.01',  # Higher entropy for stable exploration
     ]
     parser, _ = parse_sf_args(argv=argv)
