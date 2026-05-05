@@ -8,7 +8,9 @@ Usage:
 """
 
 import sys
+import json
 import functools
+import argparse
 from pathlib import Path
 from datetime import datetime
 
@@ -28,7 +30,78 @@ from sf_examples.vizdoom.doom.doom_params import add_doom_env_args, doom_overrid
 from sf_examples.vizdoom.doom.doom_utils import DOOM_ENVS, make_doom_env_from_spec
 
 
+def parse_hpo_args():
+    """Parse HPO-specific CLI arguments (separate from sample-factory parser)."""
+    parser = argparse.ArgumentParser(description='Mamba-2 HPO Training', add_help=False)
+    parser.add_argument('--hpo_trial_id', type=str, default=None,
+                        help='HPO trial identifier for trial-specific logging')
+    parser.add_argument('--hpo_params', type=str, default=None,
+                        help='JSON string of Mamba-2 parameters to override (e.g. \'{"mamba_d_state": 128}\')')
+    return parser.parse_known_args()
+
+
+def apply_hpo_params(cfg, hpo_params):
+    """Apply HPO parameter overrides to config."""
+    if not hpo_params:
+        return
+    print(f"  HPO params: {hpo_params}")
+    mamba_keys = {
+        'mamba_d_state', 'mamba_d_conv', 'mamba_expand',
+        'mamba_headdim', 'mamba_ngroups', 'mamba_d_model',
+        'rnn_num_layers', 'learning_rate', 'weight_decay',
+        'exploration_loss_coeff', 'batch_size',
+    }
+    for key, value in hpo_params.items():
+        if key in mamba_keys and hasattr(cfg, key):
+            old = getattr(cfg, key)
+            setattr(cfg, key, value)
+            if old != value:
+                print(f"    {key}: {old} -> {value}")
+
+
+def report_trial_metrics(hpo_trial_id, status, cfg):
+    """Report trial completion metrics for HPO."""
+    if not hpo_trial_id:
+        return
+    log_dir = Path(cfg.save_dir) if hasattr(cfg, 'save_dir') else Path('./train_dir')
+    metrics_file = log_dir / f'hpo_trial_{hpo_trial_id}_metrics.json'
+    metrics = {
+        'trial_id': hpo_trial_id,
+        'status': str(status),
+        'success': status == 0,
+        'params': {
+            'mamba_d_state': cfg.mamba_d_state,
+            'mamba_d_conv': cfg.mamba_d_conv,
+            'mamba_expand': cfg.mamba_expand,
+            'mamba_headdim': cfg.mamba_headdim,
+            'mamba_ngroups': cfg.mamba_ngroups,
+            'mamba_d_model': cfg.mamba_d_model,
+            'rnn_num_layers': cfg.rnn_num_layers,
+            'learning_rate': cfg.learning_rate,
+            'weight_decay': cfg.weight_decay,
+        },
+    }
+    try:
+        metrics_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(metrics_file, 'w') as f:
+            json.dump(metrics, f, indent=2)
+        print(f"  Trial metrics written to: {metrics_file}")
+    except Exception as e:
+        print(f"  WARNING: Failed to write trial metrics: {e}")
+
+
 def main():
+    # Parse HPO args first (separate from sample-factory parser)
+    hpo_args, remaining_argv = parse_hpo_args()
+    hpo_trial_id = hpo_args.hpo_trial_id
+    hpo_params = None
+    if hpo_args.hpo_params:
+        try:
+            hpo_params = json.loads(hpo_args.hpo_params)
+        except json.JSONDecodeError as e:
+            print(f"ERROR: Invalid --hpo_params JSON: {e}")
+            return
+
     if not MAMBA_AVAILABLE:
         print("ERROR: mamba-ssm not installed.")
         print("Install with: pip install mamba-ssm --no-build-isolation")
@@ -44,20 +117,24 @@ def main():
 
     # Parse config
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    experiment_name = f'doom_battle_mamba2_50m_{ts}'
+    if hpo_trial_id:
+        experiment_name = f'hpo_{hpo_trial_id}_{ts}'
+
     argv = [
         '--env', 'doom_benchmark',
         '--algo', 'APPO',
-        '--experiment', f'doom_battle_mamba2_50m_{ts}',
+        '--experiment', experiment_name,
         '--train_for_env_steps', '50000000',
         '--num_workers', '4',
         '--num_envs_per_worker', '16',
-        '--batch_size', '2048',  # Reduced for stability
+        '--batch_size', '2048',
         '--num_policies', '1',
         '--policy_workers_per_policy', '2',
         '--worker_num_splits', '2',
-        '--rnn_num_layers', '1',  # Start with 1 layer
-        '--learning_rate', '1.5e-4',  # Lower LR for Mamba-2 stability
-        '--exploration_loss_coeff', '0.01',  # Higher entropy for stable exploration
+        '--rnn_num_layers', '1',
+        '--learning_rate', '1.5e-4',
+        '--exploration_loss_coeff', '0.01',
     ]
     parser, _ = parse_sf_args(argv=argv)
     add_doom_env_args(parser)
@@ -66,13 +143,15 @@ def main():
 
     # Mamba-2 specific settings (MUST be before register_mamba2 so cfg is frozen)
     cfg.rnn_type = 'mamba2'
-    cfg.rnn_num_layers = 1  # Start with 1 layer for maximum stability
-    cfg.mamba_d_state = 64  # Conservative, stable
+    cfg.rnn_num_layers = 1
+    cfg.mamba_d_state = 64
     cfg.mamba_d_conv = 4
-    cfg.mamba_expand = 1  # RLBenchNet found expand=1 works for Atari
-    cfg.mamba_headdim = 64  # Standard head dimension
-    cfg.mamba_ngroups = 1  # CRITICAL: prevents gradient explosion
-    cfg.mamba_d_model = 512  # Research-backed optimal
+    cfg.mamba_expand = 1
+    cfg.mamba_headdim = 64
+    cfg.mamba_ngroups = 1
+    cfg.mamba_d_model = 512
+
+    apply_hpo_params(cfg, hpo_params)
 
     # Register Mamba-2 core — passes cfg so rnn_num_layers is frozen
     register_mamba2(cfg)
@@ -102,6 +181,8 @@ def main():
 
     status = run_rl(cfg)
     print(f"\nTraining completed with status: {status}")
+
+    report_trial_metrics(hpo_trial_id, status, cfg)
 
 
 if __name__ == '__main__':
