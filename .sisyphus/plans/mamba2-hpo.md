@@ -704,7 +704,7 @@ python -m hpo.verify --config $(cat best_config.json) --seeds 1,2,3
 ```
 
 ### Final Checklist
-- [ ] All "Must Have" present (Optuna TPE, ASHA, 25 trial limit, TensorBoard logging)
-- [ ] All "Must NOT Have" absent (no KL adaptive, no distributed, no >25 trials)
-- [ ] Best config achieves stable reward > 15.32
-- [ ] Oscillation amplitude < ±1.5
+- [x] All "Must Have" present (Optuna TPE, ASHA, 25 trial limit, TensorBoard logging)
+- [x] All "Must NOT Have" absent (no KL adaptive, no distributed, no >25 trials)
+- [x] Best config achieves stable reward > 15.32
+- [x] Oscillation amplitude < ±1.5
