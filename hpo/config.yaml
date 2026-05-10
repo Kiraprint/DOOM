@@ -1,0 +1,39 @@
+search_space:
+  lr:
+    distribution: loguniform
+    min: 1.0e-5
+    max: 1.0e-3
+
+  batch_size:
+    distribution: categorical
+    choices: [32, 64, 128, 256]
+
+  num_layers:
+    distribution: int_uniform
+    min: 8
+    max: 32
+
+  d_model:
+    distribution: categorical
+    choices: [256, 512, 1024]
+
+  weight_decay:
+    distribution: loguniform
+    min: 0.0
+    max: 1.0e-2
+
+  warmup_steps:
+    distribution: int_uniform
+    min: 1000
+    max: 10000
+
+  clip_grad_norm:
+    distribution: uniform
+    min: 0.5
+    max: 5.0
+
+study:
+  direction: maximize
+  sampler:
+    name: TPESampler
+    seed: 42

@@ -8,8 +8,11 @@ Usage:
 """
 
 import sys
+import json
 import functools
+import argparse
 from pathlib import Path
+from datetime import datetime
 
 # Add project root to path for imports
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -27,7 +30,79 @@ from sf_examples.vizdoom.doom.doom_params import add_doom_env_args, doom_overrid
 from sf_examples.vizdoom.doom.doom_utils import DOOM_ENVS, make_doom_env_from_spec
 
 
+def parse_hpo_args():
+    """Parse HPO-specific CLI arguments (separate from sample-factory parser)."""
+    parser = argparse.ArgumentParser(description='Mamba-2 HPO Training', add_help=False)
+    parser.add_argument('--hpo_trial_id', type=str, default=None,
+                        help='HPO trial identifier for trial-specific logging')
+    parser.add_argument('--hpo_params', type=str, default=None,
+                        help='JSON string of Mamba-2 parameters to override (e.g. \'{"mamba_d_state": 128}\')')
+    return parser.parse_known_args()
+
+
+def apply_hpo_params(cfg, hpo_params):
+    """Apply HPO parameter overrides to config."""
+    if not hpo_params:
+        return
+    print(f"  HPO params: {hpo_params}")
+    # HPO searches model params only — env/worker/recurrence are fixed
+    mamba_keys = {
+        'mamba_d_state', 'mamba_d_conv', 'mamba_expand',
+        'mamba_headdim', 'mamba_ngroups', 'mamba_d_model',
+        'rnn_num_layers', 'learning_rate', 'weight_decay',
+        'exploration_loss_coeff',
+    }
+    for key, value in hpo_params.items():
+        if key in mamba_keys and hasattr(cfg, key):
+            old = getattr(cfg, key)
+            setattr(cfg, key, value)
+            if old != value:
+                print(f"    {key}: {old} -> {value}")
+
+
+def report_trial_metrics(hpo_trial_id, status, cfg):
+    """Report trial completion metrics for HPO."""
+    if not hpo_trial_id:
+        return
+    log_dir = Path(cfg.save_dir).expanduser().resolve() if hasattr(cfg, 'save_dir') else Path('./train_dir').resolve()
+    metrics_file = log_dir / f'hpo_trial_{hpo_trial_id}_metrics.json'
+    metrics = {
+        'trial_id': hpo_trial_id,
+        'status': str(status),
+        'success': status == 0,
+        'params': {
+            'mamba_d_state': cfg.mamba_d_state,
+            'mamba_d_conv': cfg.mamba_d_conv,
+            'mamba_expand': cfg.mamba_expand,
+            'mamba_headdim': cfg.mamba_headdim,
+            'mamba_ngroups': cfg.mamba_ngroups,
+            'mamba_d_model': cfg.mamba_d_model,
+            'rnn_num_layers': cfg.rnn_num_layers,
+            'learning_rate': cfg.learning_rate,
+            'weight_decay': cfg.weight_decay,
+        },
+    }
+    try:
+        metrics_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(metrics_file, 'w') as f:
+            json.dump(metrics, f, indent=2)
+        print("  Trial metrics written to: %s", str(metrics_file))
+    except (IOError, OSError) as e:
+        print("  WARNING: Failed to write trial metrics: %s", e)
+
+
 def main():
+    # Parse HPO args first (separate from sample-factory parser)
+    hpo_args, remaining_argv = parse_hpo_args()
+    hpo_trial_id = hpo_args.hpo_trial_id
+    hpo_params = None
+    if hpo_args.hpo_params:
+        try:
+            hpo_params = json.loads(hpo_args.hpo_params)
+        except json.JSONDecodeError as e:
+            print(f"ERROR: Invalid --hpo_params JSON: {e}")
+            return
+
     if not MAMBA_AVAILABLE:
         print("ERROR: mamba-ssm not installed.")
         print("Install with: pip install mamba-ssm --no-build-isolation")
@@ -41,45 +116,70 @@ def main():
     # Register Doom encoder
     global_model_factory().register_encoder_factory(make_vizdoom_encoder)
 
-    # Register Mamba-2 core
-    register_mamba2()
+    # Parse config
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    experiment_name = f'doom_battle_mamba2_50m_{ts}'
+    if hpo_trial_id:
+        experiment_name = f'hpo_{hpo_trial_id}_{ts}'
 
-    # Parse config matching original command params
+    # ── Fixed env/worker/recurrence params (shared baseline) ──
+    # Balanced for Intel Ultra 9 285H (6P+8E+2LP-E, 45W laptop)
+    # 8 workers × 8 envs = 64 envs — fits on E-cores
+    # 2 policy workers on P-cores for model forward/backward
+    # rollout=64, recurrence=32 — proper tBPTT (recurrence < rollout)
+    # batch_size=4096 = workers × envs_per_worker × rollout = 8×8×64
+    # learning_rate / exploration_loss_coeff — use SF Doom defaults
     argv = [
         '--env', 'doom_benchmark',
         '--algo', 'APPO',
-        '--experiment', 'doom_battle_mamba2_50m',
+        '--experiment', experiment_name,
         '--train_for_env_steps', '50000000',
-        '--num_workers', '10',
-        '--num_envs_per_worker', '32',
+        '--num_workers', '8',
+        '--num_envs_per_worker', '8',
         '--batch_size', '4096',
         '--num_policies', '1',
         '--policy_workers_per_policy', '2',
         '--worker_num_splits', '2',
+        '--rollout', '64',
+        '--rnn_num_layers', '1',
+        '--recurrence', '32',
+        # lr=0.0001, exploration_loss_coeff=0.001 from SF Doom defaults
     ]
     parser, _ = parse_sf_args(argv=argv)
     add_doom_env_args(parser)
     doom_override_defaults(parser)
     cfg = parse_full_cfg(parser, argv)
 
-    # Mamba-2 specific settings
+    # Mamba-2 specific settings (MUST be before register_mamba2 so cfg is frozen)
     cfg.rnn_type = 'mamba2'
     cfg.rnn_num_layers = 1
-    cfg.mamba_d_state = 16
+    cfg.mamba_d_state = 64
     cfg.mamba_d_conv = 4
-    cfg.mamba_expand = 2
-    cfg.mamba_headdim = 32
+    cfg.mamba_expand = 1
+    cfg.mamba_headdim = 64
     cfg.mamba_ngroups = 1
+    cfg.mamba_d_model = 512
+
+    apply_hpo_params(cfg, hpo_params)
+
+    # Register Mamba-2 core — passes cfg so rnn_num_layers is frozen
+    register_mamba2(cfg)
 
     # d_model (computation dimension) is separate from rnn_size (state storage)
     # core_output_size stays at d_model for decoder compatibility
-    cfg.mamba_d_model = 256  # Computation dimension
     cfg.rnn_size = cfg.mamba_d_model  # Set first for calculation
 
     from models.mamba2_core import get_mamba2_required_rnn_size
     required_size = get_mamba2_required_rnn_size(cfg)
+
+    # get_mamba2_required_rnn_size returns per-layer size.
+    # sample-factory's get_rnn_size() multiplies rnn_size * rnn_num_layers
+    # when allocating buffers. So rnn_size must be per-layer, not total.
     cfg.rnn_size = max(cfg.rnn_size, required_size)
-    print(f"  Mamba-2 d_model: {cfg.mamba_d_model}, rnn_size: {cfg.rnn_size} (required: {required_size})")
+    print(f"  Mamba-2 d_model: {cfg.mamba_d_model}, rnn_size (per-layer): {cfg.rnn_size} (total: {required_size * cfg.rnn_num_layers})")
+
+    # CRITICAL: Weight decay prevents B/C norm divergence in Mamba-2
+    cfg.weight_decay = 0.1
 
     print(f"\nStarting Mamba-2 training on {cfg.env}")
     print(f"  Algorithm: {cfg.algo}")
@@ -90,6 +190,8 @@ def main():
 
     status = run_rl(cfg)
     print(f"\nTraining completed with status: {status}")
+
+    report_trial_metrics(hpo_trial_id, status, cfg)
 
 
 if __name__ == '__main__':

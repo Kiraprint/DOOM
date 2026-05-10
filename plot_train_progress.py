@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tensorboard.backend.event_processing import event_accumulator
 
-TRAIN_DIR = "/home/kir/Code/DOOM/train_dir"
-MAX_STEPS_DEFAULT = 50_000_000  # 50M for doom_battle_appo runs
+TRAIN_DIR = "./plot_dir"
+MAX_STEPS_DEFAULT = 250_000_000  # 50M for doom_battle_appo runs
 SMOOTH_WINDOW = 20              # running-mean window for smoothing
 
 

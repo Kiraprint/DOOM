@@ -11,3 +11,19 @@ wheels/
 
 # Train logs
 train_dir/
+plot_dir/
+
+# Pi tooling
+.pi-lens/
+.sisyphus/
+*.md
+session-*.md
+
+# Databases & logs
+*.db
+*.log
+
+# Images (generated)
+*.png
+*.jpg
+*.jpeg
