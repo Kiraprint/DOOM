@@ -198,6 +198,22 @@ def _extract_reward_metrics(train_dir: str, trial_id: int, timeout: Optional[int
         return {'max_reward': 0.0, 'mean_reward': 0.0, 'std_reward': 0.0}
 
 
+def _cleanup_stale_processes() -> None:
+    """Kill stale vizdoom and sample-factory processes from crashed trials."""
+    import subprocess as _sp
+    for proc_name in ("vizdoom", "doom"):
+        try:
+            pids = _sp.run(
+                ["pgrep", "-f", proc_name], capture_output=True, text=True, timeout=5
+            ).stdout.strip()
+            if pids:
+                print(f"[CLEANUP] Killing stale {proc_name} processes: {pids}")
+                _sp.run(["pkill", "-9", "-f", proc_name], timeout=10)
+                time.sleep(1)
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
+
 def _cleanup_shm() -> None:
     """Clean up stale shared memory from crashed sample-factory / PyTorch processes.
 
@@ -206,7 +222,12 @@ def _cleanup_shm() -> None:
     shared memory, causing silent hangs (Fps=0.0, components not starting).
     """
     shm = Path("/dev/shm")
-    for pattern in ("torch_*", "torch_shm_*", "cuda.shm.*", "sem.mp-*"):
+    # Expanded patterns — crashed trials leave many more files than originally tracked
+    patterns = (
+        "torch_*", "torch_shm_*", "cuda.shm.*", "sem.mp-*",
+        "mp-*", ".torch_shm_", "faster_fifo_*", "sample_factory_*",
+    )
+    for pattern in patterns:
         for f in shm.glob(pattern):
             try:
                 f.unlink()
@@ -220,18 +241,8 @@ def run_trial(
     train_dir: str = "train_dir",
     timeout: Optional[int] = None,
 ) -> Dict[str, Any]:
+    _cleanup_stale_processes()
     _cleanup_shm()
-
-    # Verify no stale VizDoom processes are holding shm
-    import subprocess as _sp
-    stale = _sp.run(
-        ["pgrep", "-c", "vizdoom"], capture_output=True, text=True, timeout=5
-    ).stdout.strip()
-    if stale.isdigit() and int(stale) > 0:
-        print(f"[WARNING] {stale} stale vizdoom detected, killing...")
-        _sp.run(["pkill", "-9", "vizdoom"], timeout=10)
-        time.sleep(2)
-        _cleanup_shm()
 
     if not MAMBA_AVAILABLE:
         raise RuntimeError(
@@ -283,16 +294,22 @@ def run_trial(
     start_time = time.time()
     try:
         status = run_rl(cfg)
-    except RuntimeError as e:
-        print(f"Trial {trial_id} failed: {e}")
+    except Exception as e:
+        # Catch ALL exceptions, not just RuntimeError.
+        # Shared memory errors, attribute errors, and VizDoom crashes
+        # raise different exception types.
+        print(f"Trial {trial_id} failed: {type(e).__name__}: {e}")
         allocated, reserved, peak = _get_gpu_memory()
+        # Clean up aggressively on failure to prevent cascading failures
+        _cleanup_stale_processes()
+        _cleanup_shm()
         return {
             'trial_id': trial_id,
             'max_reward': 0.0,
             'mean_reward': 0.0,
             'std_reward': 0.0,
             'status': 'error',
-            'error': str(e),
+            'error': f"{type(e).__name__}: {e}",
             'gpu_memory_allocated_mb': allocated,
             'gpu_memory_peak_mb': peak,
         }
@@ -306,8 +323,10 @@ def run_trial(
     end_memory = _get_gpu_memory()[0]
     print(f"Trial {trial_id} GPU change: {end_memory - start_memory:+.0f}MB")
 
-    # Clean up GPU memory before extracting metrics
+    # Clean up GPU memory and stale resources before extracting metrics
     _cleanup_gpu()
+    _cleanup_stale_processes()
+    _cleanup_shm()
 
     metrics = _extract_reward_metrics(train_dir, trial_id, timeout)
     metrics['trial_id'] = trial_id
