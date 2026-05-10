@@ -14,7 +14,7 @@ import optuna
 from typing import Dict, Any
 
 from hpo.search_space import get_search_space, suggest
-from hpo.evaluate import run_trial
+from hpo.evaluate import run_trial, _get_gpu_memory, _track_gpu_memory
 
 
 TRIAL_TIMEOUT_SECONDS = 2 * 3600  # 2 hours
@@ -99,6 +99,9 @@ def objective(trial: optuna.Trial) -> float:
         trial.set_user_attr('std_reward', metrics.get('std_reward', 0.0))
         trial.set_user_attr('elapsed_seconds', metrics.get('elapsed_seconds', 0.0))
         trial.set_user_attr('status', metrics.get('status', 'unknown'))
+        trial.set_user_attr('gpu_memory_allocated_mb', metrics.get('gpu_memory_allocated_mb', 0.0))
+        trial.set_user_attr('gpu_memory_peak_mb', metrics.get('gpu_memory_peak_mb', 0.0))
+        trial.set_user_attr('gpu_memory_change_mb', metrics.get('gpu_memory_change_mb', 0.0))
 
         return reward
 
@@ -118,4 +121,4 @@ def objective(trial: optuna.Trial) -> float:
         signal.alarm(0)  # Cancel alarm
         signal.signal(signal.SIGALRM, old_handler)
         elapsed = time.time() - start_time
-        print(f"Trial {trial_num} wrapper finished in {elapsed:.0f}s")
+        print(f"Trial {trial_num} wrapper done in {elapsed:.0f}s")

@@ -19,7 +19,6 @@ GPU Management:
 import argparse
 import json
 import logging
-import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,7 +30,7 @@ from optuna.study import Study
 from hpo.constants import TRIAL_LIMIT, TIME_BUDGET_HOURS
 from hpo.study import create_study
 from hpo.trial_wrapper import objective
-from hpo.early_stopping import ASHAScheduler
+from hpo.evaluate import _track_gpu_memory
 
 # ---------------------------------------------------------------------------
 # Logging setup
@@ -42,64 +41,6 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("hpo.orchestrator")
-
-# ---------------------------------------------------------------------------
-# GPU management
-# ---------------------------------------------------------------------------
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
-GPU_SCRIPT = SCRIPTS_DIR / "manage_gpu.sh"
-
-
-def _run_gpu_script(command: str, *, capture: bool = False) -> None:
-    if not GPU_SCRIPT.exists():
-        logger.warning("GPU script not found at %s — skipping GPU management", GPU_SCRIPT)
-        return
-
-    cmd = [str(GPU_SCRIPT), command]
-    logger.info("Running: %s", " ".join(cmd))
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=capture,
-            text=True,
-            timeout=120,
-        )
-        if result.returncode != 0:
-            logger.error("GPU script failed: %s", result.stderr.strip())
-            raise RuntimeError(f"GPU script '{command}' failed: {result.stderr.strip()}")
-    except FileNotFoundError:
-        logger.warning("GPU script not executable at %s", GPU_SCRIPT)
-    except subprocess.TimeoutExpired:
-        logger.error("GPU script timed out for command '%s'", command)
-        raise
-
-
-def stop_llm_server() -> None:
-    _run_gpu_script("stop-llm")
-
-
-def start_llm_server() -> None:
-    _run_gpu_script("start-llm")
-
-
-def check_gpu_available() -> bool:
-    if not GPU_SCRIPT.exists():
-        return True
-
-    logger.info("Checking GPU memory availability...")
-    result = subprocess.run(
-        [str(GPU_SCRIPT), "check-gpu"],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if result.returncode != 0:
-        logger.warning("GPU check failed: %s", result.stderr.strip())
-        logger.warning("Proceeding anyway — manual intervention may be needed")
-        return False
-    logger.info("GPU check passed")
-    return True
-
 
 # ---------------------------------------------------------------------------
 # Trial logging
@@ -134,6 +75,7 @@ def save_trials_json(study: Study, output_path: Path) -> None:
         "trials": trials_data,
     }
 
+    output_path = Path(output_path).expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, default=str)
@@ -187,8 +129,6 @@ def run_hpo(
     logger.info("Dry run     : %s", dry_run)
     logger.info("=" * 60)
 
-    # Stop llama-server
-    stop_llm_server()
 
     start_time = time.time()
     study: Optional[Study] = None
@@ -210,16 +150,16 @@ def run_hpo(
             # Check time budget before each trial
             check_time_budget(start_time, time_budget_hours)
 
-            # Verify GPU available
-            check_gpu_available()
+            _track_gpu_memory(f"BEFORE_TRIAL_{trials_completed + 1}")
 
             # Add one trial
             study.optimize(
                 objective,
                 n_trials=1,
-                catch=(Exception,),
+                catch=(RuntimeError, optuna.TrialPruned),
             )
             trials_completed += 1
+            _track_gpu_memory(f"AFTER_TRIAL_{trials_completed}")
             logger.info(
                 "Trial %d/%d completed  |  Best value: %.4f  |  Elapsed: %.1fh",
                 trials_completed,
@@ -256,11 +196,6 @@ def run_hpo(
         if study is not None:
             save_trials_json(study, Path(log_dir) / "hpo_results_interrupted.json")
         return study
-
-    finally:
-        # Always restart llama-server
-        logger.info("Restarting llama-server...")
-        start_llm_server()
 
 
 # ---------------------------------------------------------------------------

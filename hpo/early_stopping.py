@@ -17,6 +17,7 @@ Config:
     reduction_factor: 2 (bracket configuration)
 """
 import logging
+import threading
 from typing import Optional
 
 import optuna
@@ -97,6 +98,7 @@ class ASHAScheduler:
         return False
 
 
+_scheduler_lock = threading.Lock()
 _scheduler_cache: dict[int, ASHAScheduler] = {}
 
 
@@ -108,11 +110,12 @@ def get_scheduler(
     """Get or create a scheduler instance (cached per study)."""
     if study_id is None:
         return ASHAScheduler(grace_period=grace_period, max_t=max_t)
-    if study_id not in _scheduler_cache:
-        _scheduler_cache[study_id] = ASHAScheduler(
-            grace_period=grace_period, max_t=max_t
-        )
-    return _scheduler_cache[study_id]
+    with _scheduler_lock:
+        if study_id not in _scheduler_cache:
+            _scheduler_cache[study_id] = ASHAScheduler(
+                grace_period=grace_period, max_t=max_t
+            )
+        return _scheduler_cache[study_id]
 
 
 def should_prune(

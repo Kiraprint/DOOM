@@ -45,11 +45,12 @@ def apply_hpo_params(cfg, hpo_params):
     if not hpo_params:
         return
     print(f"  HPO params: {hpo_params}")
+    # HPO searches model params only — env/worker/recurrence are fixed
     mamba_keys = {
         'mamba_d_state', 'mamba_d_conv', 'mamba_expand',
         'mamba_headdim', 'mamba_ngroups', 'mamba_d_model',
         'rnn_num_layers', 'learning_rate', 'weight_decay',
-        'exploration_loss_coeff', 'batch_size',
+        'exploration_loss_coeff',
     }
     for key, value in hpo_params.items():
         if key in mamba_keys and hasattr(cfg, key):
@@ -63,7 +64,7 @@ def report_trial_metrics(hpo_trial_id, status, cfg):
     """Report trial completion metrics for HPO."""
     if not hpo_trial_id:
         return
-    log_dir = Path(cfg.save_dir) if hasattr(cfg, 'save_dir') else Path('./train_dir')
+    log_dir = Path(cfg.save_dir).expanduser().resolve() if hasattr(cfg, 'save_dir') else Path('./train_dir').resolve()
     metrics_file = log_dir / f'hpo_trial_{hpo_trial_id}_metrics.json'
     metrics = {
         'trial_id': hpo_trial_id,
@@ -85,9 +86,9 @@ def report_trial_metrics(hpo_trial_id, status, cfg):
         metrics_file.parent.mkdir(parents=True, exist_ok=True)
         with open(metrics_file, 'w') as f:
             json.dump(metrics, f, indent=2)
-        print(f"  Trial metrics written to: {metrics_file}")
-    except Exception as e:
-        print(f"  WARNING: Failed to write trial metrics: {e}")
+        print("  Trial metrics written to: %s", str(metrics_file))
+    except (IOError, OSError) as e:
+        print("  WARNING: Failed to write trial metrics: %s", e)
 
 
 def main():
@@ -121,20 +122,28 @@ def main():
     if hpo_trial_id:
         experiment_name = f'hpo_{hpo_trial_id}_{ts}'
 
+    # ── Fixed env/worker/recurrence params (shared baseline) ──
+    # Balanced for Intel Ultra 9 285H (6P+8E+2LP-E, 45W laptop)
+    # 8 workers × 8 envs = 64 envs — fits on E-cores
+    # 2 policy workers on P-cores for model forward/backward
+    # rollout=64, recurrence=32 — proper tBPTT (recurrence < rollout)
+    # batch_size=4096 = workers × envs_per_worker × rollout = 8×8×64
+    # learning_rate / exploration_loss_coeff — use SF Doom defaults
     argv = [
         '--env', 'doom_benchmark',
         '--algo', 'APPO',
         '--experiment', experiment_name,
         '--train_for_env_steps', '50000000',
-        '--num_workers', '4',
-        '--num_envs_per_worker', '16',
-        '--batch_size', '2048',
+        '--num_workers', '8',
+        '--num_envs_per_worker', '8',
+        '--batch_size', '4096',
         '--num_policies', '1',
         '--policy_workers_per_policy', '2',
         '--worker_num_splits', '2',
+        '--rollout', '64',
         '--rnn_num_layers', '1',
-        '--learning_rate', '1.5e-4',
-        '--exploration_loss_coeff', '0.01',
+        '--recurrence', '32',
+        # lr=0.0001, exploration_loss_coeff=0.001 from SF Doom defaults
     ]
     parser, _ = parse_sf_args(argv=argv)
     add_doom_env_args(parser)

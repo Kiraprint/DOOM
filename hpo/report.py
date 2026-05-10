@@ -79,7 +79,7 @@ class Report:
 
 def _load_trial_logs(log_dir: str) -> List[Dict[str, Any]]:
     """Load all hpo_results_*.json files from log_dir."""
-    log_path = Path(log_dir)
+    log_path = Path(log_dir).expanduser().resolve()
     if not log_path.exists():
         logger.warning("Log directory %s does not exist", log_path)
         return []
@@ -213,6 +213,10 @@ def analyze_results(log_dir: str = "train_dir") -> Report:
             top_3_configs=[],
             all_trials=[],
         )
+    return _analyze_impl(data)
+
+
+def _analyze_impl(data: List[Dict[str, Any]]) -> Report:
 
     trials = _parse_trials(data)
     aggregates = _aggregate_by_config(trials)
@@ -304,11 +308,11 @@ def main() -> None:
     output = report_to_json(report)
 
     if args.output:
-        out_path = Path(args.output)
+        out_path = Path(args.output).expanduser().resolve()
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(output)
-        print(f"Report written to {out_path}")
+        logger.info("Report written to %s", str(out_path))
     else:
         print(output)
 

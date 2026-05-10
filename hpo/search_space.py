@@ -1,16 +1,23 @@
-"""Mamba-2 HPO Search Space. Optuna-compatible. No KL adaptive scheduling."""
+"""Mamba-2 HPO Search Space. Optuna-compatible."""
 
 
 def get_search_space() -> dict:
-    """Return search space. Values are (dist_type, *args) tuples."""
+    """HPO searches model params only. Env/worker/recurrence/batch_size fixed.
+    
+    Fixed baseline: 8 workers × 8 envs × rollout 64 = batch 4096, recurrence=32
+    """
     return {
-        "d_model": ("categorical", [256, 512, 1024]),
-        "d_state": ("categorical", [64, 128]),
-        "headdim": ("categorical", [64, 128]),
-        "expand": ("categorical", [1, 2]),
+        "mamba_d_model": ("categorical", [256, 512, 1024]),
+        "mamba_d_state": ("categorical", [64, 128]),
+        "mamba_headdim": ("categorical", [64, 128]),
+        "mamba_expand": ("categorical", [1, 2]),
         "learning_rate": ("loguniform", 1e-5, 1e-3),
         "exploration_loss_coeff": ("loguniform", 1e-4, 1e-2),
-        "batch_size": ("categorical", [2048, 4096]),
+        "weight_decay": ("loguniform", 1e-4, 1e-1),
+        "optimizer": ("categorical", ["adam", "lamb", "adamw"]),
+        "rnn_num_layers": ("categorical", [1, 2, 3]),  # Memory blocks (1 = current default)
+        # batch_size fixed at 4096 (8 workers × 8 envs × rollout 64)
+        # recurrence fixed at 32 (divides rollout=64 evenly)
     }
 
 

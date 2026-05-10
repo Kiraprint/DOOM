@@ -146,7 +146,7 @@ def verify_best_configs(
         "table": _format_table(verification_results),
     }
 
-    print(f"\n\n{'#'}{"Verification Results":^60}{'#'}")
+    print(f"\n\n{'#':^{62}}")
     print(_format_table(verification_results))
     print(f"\nTotal time: {total_elapsed:.0f}s")
     print(
@@ -202,11 +202,11 @@ def main() -> None:
     )
 
     if args.output:
-        out_path = Path(args.output)
+        out_path = Path(args.output).expanduser().resolve()
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2, default=str)
-        print(f"Results saved to {out_path}")
+        print("Results saved to %s", str(out_path))
 
 
 if __name__ == "__main__":
