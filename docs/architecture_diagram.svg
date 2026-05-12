@@ -1,0 +1,155 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 740 540" font-family="'Times New Roman', Times, serif" font-size="10">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4B5563"/>
+    </marker>
+    <marker id="arrow-dashed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9CA3AF"/>
+    </marker>
+    <linearGradient id="header-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#1e40af"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+    <style>
+      .title { font-size: 13px; font-weight: bold; fill: #1e3a5f; }
+      .subtitle { font-size: 9px; fill: #64748b; }
+      .box-label { font-size: 10px; font-weight: bold; fill: #1e293b; }
+      .box-sub { font-size: 8px; fill: #475569; }
+      .box-detail { font-size: 7.5px; fill: #64748b; }
+      .badge { font-size: 7px; fill: #fff; }
+    </style>
+  </defs>
+
+  <!-- ====== TITLE ====== -->
+  <rect x="0" y="0" width="740" height="32" fill="url(#header-grad)" rx="4"/>
+  <text x="370" y="21" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Архитектура подключаемых модулей памяти в PolicyModel Sample Factory</text>
+
+  <!-- ====== LEGEND ====== -->
+  <rect x="10" y="40" width="720" height="22" fill="#f8fafc" rx="3" stroke="#e2e8f0" stroke-width="0.5"/>
+  <rect x="20" y="45" width="10" height="10" fill="#dbeafe" stroke="#3b82f6" stroke-width="0.5"/>
+  <text x="34" y="53" font-size="7" fill="#475569">CNN / Head</text>
+  <rect x="100" y="45" width="10" height="10" fill="#f0fdf4" stroke="#8b5cf6" stroke-width="0.5"/>
+  <text x="114" y="53" font-size="7" fill="#475569">Модуль памяти</text>
+  <line x1="190" y1="50" x2="215" y2="50" stroke="#4B5563" stroke-width="1" marker-end="url(#arrow)"/>
+  <text x="220" y="53" font-size="7" fill="#475569">Поток данных (forward)</text>
+  <line x1="320" y1="50" x2="345" y2="50" stroke="#9CA3AF" stroke-width="0.8" stroke-dasharray="4,3"/>
+  <text x="350" y="53" font-size="7" fill="#475569">Управление rnn_states</text>
+
+  <!-- ====== MAIN CONTAINER ====== -->
+  <rect x="10" y="68" width="720" height="400" fill="#fafbfc" stroke="#1e40af" stroke-width="1.5" rx="6"/>
+  <rect x="10" y="68" width="720" height="22" fill="#dbeafe" rx="6"/>
+  <rect x="10" y="82" width="720" height="8" fill="#dbeafe"/>
+  <text x="370" y="83" text-anchor="middle" font-size="10" font-weight="bold" fill="#1e3a5f">PolicyModel (контейнер)</text>
+
+  <!-- ====== CNNENCODER ====== -->
+  <rect x="245" y="100" width="250" height="62" fill="#dbeafe" stroke="#3b82f6" stroke-width="1" rx="4"/>
+  <text x="370" y="116" text-anchor="middle" class="box-label">CNNEncoder</text>
+  <text x="370" y="128" text-anchor="middle" class="box-sub">VizdoomEncoder</text>
+  <text x="370" y="140" text-anchor="middle" class="box-detail">obs (4×640×480) → Conv → ReLU → flatten → features (512,)</text>
+  <text x="370" y="152" text-anchor="middle" class="box-detail">вход: 4-канальный стек предобработанных кадров</text>
+
+  <!-- Arrow: CNNEncoder → Memory -->
+  <line x1="370" y1="162" x2="370" y2="190" stroke="#4B5563" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <text x="382" y="178" font-size="7" fill="#4B5563">features (B, T, 512)</text>
+
+  <!-- ====== MEMORY MODULE CONTAINER ====== -->
+  <rect x="30" y="190" width="680" height="155" fill="#f0fdf4" stroke="#8b5cf6" stroke-width="1.2" rx="5"/>
+  <rect x="30" y="190" width="680" height="18" fill="#e9d5ff" rx="5"/>
+  <rect x="30" y="203" width="680" height="5" fill="#e9d5ff"/>
+  <text x="370" y="203" text-anchor="middle" font-size="9" font-weight="bold" fill="#5b21b6">Модуль памяти — ModelCore (подключаемый компонент)</text>
+  <text x="370" y="221" text-anchor="middle" class="box-sub" font-size="8">Интерфейс: forward(head_output, rnn_states) → (output, new_rnn_states)</text>
+
+  <!-- GRU box -->
+  <rect x="48" y="232" width="148" height="100" fill="#fff" stroke="#3b82f6" stroke-width="0.8" rx="4"/>
+  <text x="122" y="250" text-anchor="middle" class="box-label">GRU</text>
+  <text x="122" y="263" text-anchor="middle" class="box-sub">ModelCoreRNN</text>
+  <text x="122" y="278" text-anchor="middle" class="box-detail">GRUCell, recurrence=32</text>
+  <text x="122" y="291" text-anchor="middle" class="box-detail">скрытое состояние 512</text>
+  <text x="122" y="304" text-anchor="middle" class="box-detail">встроенная реализация SF</text>
+  <text x="122" y="317" text-anchor="middle" class="box-detail">BPTT — стабильные градиенты</text>
+  <rect x="48" y="232" width="148" height="14" fill="#eff6ff" rx="3"/>
+  <text x="55" y="242" font-size="6.5" fill="#3b82f6" font-weight="bold">B A S E L I N E</text>
+
+  <!-- Mamba-2 box -->
+  <rect x="206" y="232" width="148" height="100" fill="#fff" stroke="#8b5cf6" stroke-width="0.8" rx="4"/>
+  <text x="280" y="250" text-anchor="middle" class="box-label">Mamba-2</text>
+  <text x="280" y="263" text-anchor="middle" class="box-sub">Mamba2Core</text>
+  <text x="280" y="278" text-anchor="middle" class="box-detail">conv_state + ssm_state</text>
+  <text x="280" y="291" text-anchor="middle" class="box-detail">сериализация в rnn_states</text>
+  <text x="280" y="304" text-anchor="middle" class="box-detail">O(L) — линейная сложность</text>
+  <text x="280" y="317" text-anchor="middle" class="box-detail">gradient checkpointing</text>
+  <rect x="206" y="232" width="148" height="14" fill="#f5f3ff" rx="3"/>
+  <text x="215" y="242" font-size="6.5" fill="#8b5cf6" font-weight="bold">C U S T O M</text>
+
+  <!-- Transformer box -->
+  <rect x="364" y="232" width="148" height="100" fill="#fff" stroke="#d97706" stroke-width="0.8" rx="4"/>
+  <text x="438" y="250" text-anchor="middle" class="box-label">Transformer</text>
+  <text x="438" y="263" text-anchor="middle" class="box-sub">TransformerCore</text>
+  <text x="438" y="278" text-anchor="middle" class="box-detail">sliding window 64 шага</text>
+  <text x="438" y="291" text-anchor="middle" class="box-detail">каузальная маска</text>
+  <text x="438" y="304" text-anchor="middle" class="box-detail">O(L²) — квадратичная</text>
+  <text x="438" y="317" text-anchor="middle" class="box-detail">2-4 слоя, 8 голов</text>
+  <rect x="364" y="232" width="148" height="14" fill="#fffbeb" rx="3"/>
+  <text x="373" y="242" font-size="6.5" fill="#d97706" font-weight="bold">C U S T O M</text>
+
+  <!-- Perceiver box -->
+  <rect x="522" y="232" width="148" height="100" fill="#fff" stroke="#059669" stroke-width="0.8" rx="4"/>
+  <text x="596" y="250" text-anchor="middle" class="box-label">Perceiver IO</text>
+  <text x="596" y="263" text-anchor="middle" class="box-sub">PerceiverCore</text>
+  <text x="596" y="278" text-anchor="middle" class="box-detail">латентный массив 32×512</text>
+  <text x="596" y="291" text-anchor="middle" class="box-detail">кросс-внимание</text>
+  <text x="596" y="304" text-anchor="middle" class="box-detail">фикс. выч. стоимость</text>
+  <text x="596" y="317" text-anchor="middle" class="box-detail">2 блока самовнимания</text>
+  <rect x="522" y="232" width="148" height="14" fill="#ecfdf5" rx="3"/>
+  <text x="531" y="242" font-size="6.5" fill="#059669" font-weight="bold">C U S T O M</text>
+
+  <!-- Arrow: Memory → Head -->
+  <line x1="370" y1="345" x2="370" y2="375" stroke="#4B5563" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <text x="382" y="363" font-size="7" fill="#4B5563">hidden state (B, 512)</text>
+
+  <!-- ====== POLICY HEAD + VALUE HEAD ====== -->
+  <rect x="195" y="375" width="350" height="52" fill="#dbeafe" stroke="#3b82f6" stroke-width="1" rx="4"/>
+  <text x="370" y="391" text-anchor="middle" class="box-label">PolicyHead / ValueHead</text>
+  <text x="370" y="404" text-anchor="middle" class="box-sub">Декодер политики</text>
+  <text x="370" y="417" text-anchor="middle" class="box-detail">Linear(512, |A|) → softmax  │  Linear(512, 1) → value</text>
+
+  <!-- Dashed line: rnn_states feedback -->
+  <line x1="140" y1="190" x2="55" y2="190" stroke="#9CA3AF" stroke-width="0.8" stroke-dasharray="4,3"/>
+  <line x1="55" y1="190" x2="55" y2="435" stroke="#9CA3AF" stroke-width="0.8" stroke-dasharray="4,3"/>
+  <line x1="55" y1="435" x2="195" y2="435" stroke="#9CA3AF" stroke-width="0.8" stroke-dasharray="4,3" marker-end="url(#arrow-dashed)"/>
+  <text x="48" y="320" text-anchor="middle" font-size="6.5" fill="#9CA3AF" transform="rotate(-90, 48, 320)">rnn_states (управление SF)</text>
+
+  <!-- ====== SYSTEM CONTEXT (Info Box) ====== -->
+  <rect x="10" y="474" width="720" height="60" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1" rx="4"/>
+  <rect x="10" y="474" width="720" height="16" fill="#e2e8f0" rx="4"/>
+  <rect x="10" y="485" width="720" height="5" fill="#e2e8f0"/>
+  <text x="370" y="486" text-anchor="middle" font-size="9" font-weight="bold" fill="#475569">Интеграция в тренировочный цикл Sample Factory</text>
+
+  <!-- Small system boxes -->
+  <rect x="30" y="498" width="130" height="26" fill="#f1f5f9" stroke="#94a3b8" stroke-width="0.7" rx="3"/>
+  <text x="95" y="514" text-anchor="middle" font-size="7.5" fill="#334155">ViZDoom (8 env/worker)</text>
+
+  <line x1="160" y1="511" x2="180" y2="511" stroke="#4B5563" stroke-width="0.8" marker-end="url(#arrow)"/>
+
+  <rect x="182" y="498" width="130" height="26" fill="#f1f5f9" stroke="#94a3b8" stroke-width="0.7" rx="3"/>
+  <text x="247" y="514" text-anchor="middle" font-size="7.5" fill="#334155">PolicyWorker × 8</text>
+
+  <line x1="312" y1="511" x2="332" y2="511" stroke="#4B5563" stroke-width="0.8" marker-end="url(#arrow)"/>
+
+  <rect x="334" y="498" width="100" height="26" fill="#f1f5f9" stroke="#94a3b8" stroke-width="0.7" rx="3"/>
+  <text x="384" y="514" text-anchor="middle" font-size="7.5" fill="#334155">Queue</text>
+
+  <line x1="434" y1="511" x2="454" y2="511" stroke="#4B5563" stroke-width="0.8" marker-end="url(#arrow)"/>
+
+  <rect x="456" y="498" width="130" height="26" fill="#f1f5f9" stroke="#94a3b8" stroke-width="0.7" rx="3"/>
+  <text x="521" y="514" text-anchor="middle" font-size="7.5" fill="#334155">Learner (GPU / APPO)</text>
+
+  <!-- Feedback loop -->
+  <line x1="521" y1="498" x2="247" y2="498" stroke="#9CA3AF" stroke-width="0.6" stroke-dasharray="3,3" marker-end="url(#arrow-dashed)"/>
+  <text x="384" y="494" text-anchor="middle" font-size="6" fill="#9CA3AF">синхронизация весов</text>
+
+  <!-- PolicyModel indicator -->
+  <rect x="610" y="498" width="105" height="26" fill="#dbeafe" stroke="#3b82f6" stroke-width="0.7" rx="3"/>
+  <text x="662" y="514" text-anchor="middle" font-size="7" font-weight="bold" fill="#1e3a5f">PolicyModel</text>
+  <line x1="586" y1="511" x2="608" y2="511" stroke="#3b82f6" stroke-width="0.8" stroke-dasharray="2,2"/>
+</svg>
