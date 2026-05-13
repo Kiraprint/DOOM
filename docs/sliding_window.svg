@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 280" font-family="'Times New Roman',Times,serif" font-size="11">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4B5563"/></marker></defs>
+<rect x="0" y="0" width="680" height="280" fill="#fafbfc" rx="4"/>
+<text x="340" y="22" text-anchor="middle" font-weight="bold" font-size="13" fill="#1e3a5f">Transformator: skolzyashee okno na inference</text>
+
+<!-- Window at step t -->
+<rect x="30" y="60" width="280" height="140" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+<text x="170" y="80" text-anchor="middle" font-weight="bold" font-size="10" fill="#1e40af">Okno na shage t (64 tokena)</text>
+<rect x="45" y="95" width="50" height="25" rx="2" fill="#e0e7ff" stroke="#6366f1" stroke-width="0.8"/><text x="70" y="112" text-anchor="middle" font-size="8" fill="#4338ca">t-63</text>
+<rect x="100" y="95" width="50" height="25" rx="2" fill="#e0e7ff" stroke="#6366f1" stroke-width="0.8"/><text x="125" y="112" text-anchor="middle" font-size="8" fill="#4338ca">...</text>
+<rect x="155" y="95" width="50" height="25" rx="2" fill="#e0e7ff" stroke="#6366f1" stroke-width="0.8"/><text x="180" y="112" text-anchor="middle" font-size="8" fill="#4338ca">t-2</text>
+<rect x="210" y="95" width="50" height="25" rx="2" fill="#e0e7ff" stroke="#6366f1" stroke-width="0.8"/><text x="235" y="112" text-anchor="middle" font-size="8" fill="#4338ca">t-1</text>
+<rect x="265" y="95" width="35" height="25" rx="2" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.2"/><text x="282" y="112" text-anchor="middle" font-size="8" font-weight="bold" fill="#b45309">t</text>
+<text x="170" y="155" text-anchor="middle" font-size="9" fill="#475569">Matrix vnimaniya: 64 x 64 (O(L^2))</text>
+<text x="170" y="170" text-anchor="middle" font-size="9" fill="#475569">Kauzalnaya maska: linear + nizhnyaya diagonal</text>
+<text x="170" y="185" text-anchor="middle" font-size="9" fill="#475569">Poslednij token t vliyaet na vse; obratnoe vnimanie zapresheno</text>
+
+<!-- Arrow -->
+<line x1="310" y1="130" x2="350" y2="130" stroke="#4B5563" stroke-width="1.5" marker-end="url(#a)"/>
+
+<!-- Window at step t+1 -->
+<rect x="360" y="60" width="290" height="140" rx="4" fill="#f0fdf4" stroke="#10b981" stroke-width="1.5"/>
+<text x="505" y="80" text-anchor="middle" font-weight="bold" font-size="10" fill="#047857">Okno na shage t+1 (sdvig vpravo)</text>
+<rect x="375" y="95" width="50" height="25" rx="2" fill="#e0e7ff" stroke="#6366f1" stroke-width="0.8"/><text x="400" y="112" text-anchor="middle" font-size="8" fill="#4338ca">t-62</text>
+<rect x="430" y="95" width="50" height="25" rx="2" fill="#e0e7ff" stroke="#6366f1" stroke-width="0.8"/><text x="455" y="112" text-anchor="middle" font-size="8" fill="#4338ca">...</text>
+<rect x="485" y="95" width="50" height="25" rx="2" fill="#e0e7ff" stroke="#6366f1" stroke-width="0.8"/><text x="510" y="112" text-anchor="middle" font-size="8" fill="#4338ca">t-1</text>
+<rect x="540" y="95" width="50" height="25" rx="2" fill="#dbeafe" stroke="#3b82f6" stroke-width="0.8"/><text x="565" y="112" text-anchor="middle" font-size="8" fill="#1e40af">t</text>
+<rect x="595" y="95" width="45" height="25" rx="2" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.2"/><text x="617" y="112" text-anchor="middle" font-size="8" font-weight="bold" fill="#b45309">t+1</text>
+<text x="505" y="155" text-anchor="middle" font-size="9" fill="#475569">Skrytoe sostoyanie: vse okno (64 tok.) otsylaetsya v rnn_states</text>
+<text x="505" y="170" text-anchor="middle" font-size="9" fill="#475569">Na sleduyushem shage: roll okna, novyj token na poslednyuyu poziciyu</text>
+
+<rect x="30" y="220" width="620" height="45" rx="4" fill="#f8fafc" stroke="#e2e8f0" stroke-width="0.5"/>
+<text x="50" y="238" font-weight="bold" font-size="10" fill="#1e3a5f">Otlichie ot Mamba-2:</text>
+<text x="50" y="255" font-size="9" fill="#475569">Transformator pereschityvaet vse 64x64 vnimanie na KAZHDOM shage. Mamba-2: 1 shag O(1) posle obrabotki posledovatelnosti.</text>
+</svg>
