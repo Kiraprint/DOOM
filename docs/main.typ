@@ -198,7 +198,7 @@ ModelCore определяет два метода: forward принимает h
 
 Архитектура строится по принципу разделения уровней: среда (ViZDoom), тренировочный цикл (Sample Factory / APPO) и модель политики (PolicyModel). Внутри модели модуль памяти вынесен в отдельный сменный компонент ModelCore — между свёрточным энкодером и декодером политики. Энкодер и декодер фиксированы, замене подлежит только модуль памяти, что позволяет тестировать каждую архитектуру изолированно в идентичных условиях.
 
-На рис. <fig-arch> приведена детальная архитектура PolicyModel: CNNEncoder, сменный модуль памяти (с четырьмя реализациями), и декодер. Пунктирной линией показан поток rnn_states, которым управляет Sample Factory.
+На рис. @fig-arch приведена детальная архитектура PolicyModel: CNNEncoder, сменный модуль памяти (с четырьмя реализациями), и декодер. Пунктирной линией показан поток rnn_states, которым управляет Sample Factory.
 
 #figure(
   image("architecture_diagram.svg", width: 100%),
@@ -215,134 +215,25 @@ Mamba2StateEncoder сериализует conv_state и ssm_state в плоск�
 
 Граница эпизода определяется по L2-норме: если норма меньше 1e-6, состояние считается обнулённым и инициализируется заново. Порог, а не точный ноль, выбран из-за погрешностей при передаче чисел с плавающей точкой через очередь между процессами.
 
-Листинг 1 — Mamba2StateEncoder: кодирование и декодирование состояния:
-
-```python
-class Mamba2StateEncoder:
-    """Encodes/decodes Mamba-2 internal state (conv_state + ssm_state)
-    to/from a flat tensor that fits in rnn_states."""
-
-    def __init__(self, d_ssm: int, d_conv_dim: int, nheads: int,
-                 headdim: int, d_state: int, d_conv: int):
-        self.conv_state_size = d_conv_dim * d_conv
-        self.ssm_state_size = nheads * headdim * d_state
-        self.total_size = self.conv_state_size + self.ssm_state_size
-
-    def encode(self, conv_state, ssm_state) -> torch.Tensor:
-        """Flatten conv_state (batch, d_conv_dim, d_conv)
-           and ssm_state (batch, nheads, headdim, d_state)
-           into one tensor (batch, total_size)."""
-        conv_flat = conv_state.reshape(conv_state.shape[0], -1)
-        ssm_flat = ssm_state.reshape(ssm_state.shape[0], -1)
-        return torch.cat([conv_flat, ssm_flat], dim=-1)
-
-    def decode(self, flat_state, device=None, dtype=None):
-        """Split flat tensor back into conv_state and ssm_state."""
-        batch = flat_state.shape[0]
-        conv_flat = flat_state[:, :self.conv_state_size]
-        ssm_flat = flat_state[:, self.conv_state_size:]
-        conv_state = conv_flat.reshape(batch, self.d_conv_dim, self.d_conv)
-        ssm_state = ssm_flat.reshape(batch, self.nheads, self.headdim, self.d_state)
-        return conv_state, ssm_state
-```
+Листинг В.1 — Mamba2StateEncoder (приведён в приложении В).
 
 === Интеграция с ModelCore sample-factory
 
 Метод forward принимает head_output (PackedSequence на обучении, тензор на инференсе) и rnn_states, возвращает выход и новое состояние. На обучении PackedSequence распаковывается в 3D-тензор, проходит через Mamba-2 блоки, пакуется обратно. На инференсе создаётся InferenceParams, состояние загружается из rnn_states, после прохода кодируется обратно.
 
-Листинг 2 — Mamba2Core.forward: ключевой метод интеграции:
-
-```python
-class Mamba2Core(ModelCore):
-    def forward(self, head_output, rnn_states):
-        is_seq = not torch.is_tensor(head_output)
-
-        if is_seq:
-            # Training: PackedSequence -> (T, B, D)
-            x_data = _unpack_packed_sequence_2d(head_output)
-        else:
-            # Inference: (B, D) -> (1, B, D)
-            x_data = head_output.unsqueeze(0)
-
-        # Mamba expects (B, T, D)
-        x_data = x_data.permute(1, 0, 2)
-        x_data = self.input_proj(x_data)
-
-        if is_seq:
-            # Training: process full sequence
-            if getattr(self.cfg, 'gradient_checkpointing', True):
-                x_data = self._forward_with_checkpointing(x_data)
-            else:
-                x_data = self.mamba_layers(x_data)
-        else:
-            # Inference: decode state, process one step, encode back
-            batch_size = x_data.shape[0]
-            inference_params = self._create_inference_params(batch_size)
-            self._load_states_from_rnn(inference_params, rnn_states)
-            inference_params.seqlen_offset = 1
-
-            for norm, wrapped in zip(self.mamba_norms, self.mamba_wrapped):
-                x_data = wrapped(norm(x_data),
-                               inference_params=inference_params)
-
-            new_rnn_states = self._get_inference_states(inference_params)
-
-        x_data = x_data.permute(1, 0, 2)  # back to (T, B, D)
-
-        if is_seq:
-            x = _pack_to_2d_sequence(x_data, head_output)
-            new_rnn_states = rnn_states
-        else:
-            x = x_data.squeeze(0)
-
-        return x, new_rnn_states
-```
+Листинг В.2 — Mamba2Core.forward (приведён в приложении В).
 
 === Gradient checkpointing
 
 Промежуточные активации не хранятся, а пересчитываются на обратном проходе. Снижение потребления VRAM составляет 50% при увеличении времени вычислений на 20-30%. Включается gradient_checkpointing = True, каждый блок обёрнут в torch.utils.checkpoint.checkpoint.
 
-Листинг 3 — Gradient checkpointing в Mamba2Core:
-
-```python
-def _forward_with_checkpointing(self, x: torch.Tensor) -> torch.Tensor:
-    from torch.utils.checkpoint import checkpoint
-
-    def segment_forward(x, norm, mamba_layer):
-        return mamba_layer(norm(x))
-
-    output = x
-    for norm, wrapped in zip(self.mamba_norms, self.mamba_wrapped):
-        output = checkpoint(
-            segment_forward,
-            output, norm, wrapped,
-            use_reentrant=False,
-        )
-    return output
-```
+Листинг В.3 — Gradient checkpointing (приведён в приложении В).
 
 === Регистрация через фабрику
 
 Mamba2Factory — обёртка, поддерживающая сериализацию pickle, которая регистрируется в глобальной фабрике моделей sample-factory. Это необходимо, так как sample-factory создаёт workers посредством multiprocessing, и фабрика должна сериализоваться.
 
-Листинг 4 — Регистрация Mamba-2 в sample-factory:
-
-```python
-class Mamba2Factory:
-    __slots__ = ('_num_layers',)
-    def __init__(self, num_layers):
-        self._num_layers = num_layers
-    def __call__(self, cfg, core_input_size):
-        if cfg.use_rnn and cfg.rnn_type == 'mamba2':
-            cfg.rnn_num_layers = self._num_layers
-            return Mamba2Core(cfg, core_input_size)
-        return default_make_core_func(cfg, core_input_size)
-
-def register_mamba2(cfg=None):
-    num_layers = cfg.rnn_num_layers if cfg is not None else 1
-    factory = Mamba2Factory(num_layers)
-    global_model_factory().register_model_core_factory(factory)
-```
+Листинг В.4 — Регистрация Mamba-2 в sample-factory (приведён в приложении В).
 
 После вызова register_mamba2(cfg) достаточно указать rnn_type='mamba2' в конфиге — sample-factory сам создаст Mamba2Core при инициализации workers.
 
@@ -364,117 +255,13 @@ def register_mamba2(cfg=None):
 
 На инференсе состояние кодируется как скользящее окно последних 64 токенов. Когда поступает новый кадр, окно сдвигается, и трансформер обрабатывает всё окно заново. Данный подход требует большего объёма вычислений по сравнению с Mamba-2 ($O(L^2)$ против $O(L)$), но даёт доступ ко всей истории внутри окна.
 
-Листинг 5 — TransformerCore: sliding window и каузальная маска:
-
-```python
-class TransformerCore(ModelCore):
-    def __init__(self, cfg, input_size):
-        self.d_model = getattr(cfg, 'transformer_d_model', cfg.rnn_size)
-        self.nhead = getattr(cfg, 'transformer_nhead', 8)
-        self.num_layers = getattr(cfg, 'transformer_num_layers', cfg.rnn_num_layers)
-        self.window_size = getattr(cfg, 'transformer_window_size', 64)
-        self.dim_feedforward = getattr(cfg, 'transformer_dim_feedforward', self.d_model * 4)
-
-        self.state_encoder = TransformerStateEncoder(self.d_model, self.window_size)
-        self.layers = nn.ModuleList()
-        for _ in range(self.num_layers):
-            self.layers.append(nn.TransformerEncoderLayer(
-                d_model=self.d_model, nhead=self.nhead,
-                dim_feedforward=self.dim_feedforward,
-                dropout=0.1, activation='gelu',
-                batch_first=True, norm_first=True,
-            ))
-
-        self.input_proj = nn.Linear(input_size, self.d_model)
-        self.pos_embedding = nn.Parameter(
-            torch.randn(1, self.window_size, self.d_model) * 0.02)
-        self.core_output_size = self.d_model
-
-    def forward(self, head_output, rnn_states):
-        # unpack, project -> (B, T, D)
-        x_data = _unpack_packed_sequence_2d(head_output).permute(1, 0, 2)
-        x_data = self.input_proj(x_data)
-        B, T, D = x_data.shape
-
-        if T > 1:  # Training: causal mask
-            x_data = x_data + self.pos_embedding[:, :T, :]
-            mask = _causal_mask(T, x_data.device)
-            for norm, layer in zip(self.norms, self.layers):
-                x_data = layer(x_data, src_mask=mask)
-            out = x_data[:, -1:, :]
-            new_rnn_states = rnn_states
-        else:  # Inference: sliding window
-            buffer = self.state_encoder.decode(rnn_states, B)
-            buffer = torch.roll(buffer, shifts=-1, dims=1)
-            buffer[:, -1:, :] = x_data + self.pos_embedding[:, -1:, :]
-            mask = _causal_mask(self.window_size, x_data.device)
-            for norm, layer in zip(self.norms, self.layers):
-                buffer = layer(buffer, src_mask=mask)
-            out = buffer[:, -1:, :]
-            new_rnn_states = self.state_encoder.encode(buffer.detach())
-
-        out = out.permute(1, 0, 2)
-        x = _pack_to_2d_sequence(out.expand(T, -1, -1).contiguous(), head_output)
-        return x, new_rnn_states
-```
+Листинг В.5 — TransformerCore (приведён в приложении В).
 
 == Реализация PerceiverCore
 
 Вход проецируется на латентный массив через кросс-внимание @jaegle2022perceiver, массив обрабатывается трансформерными блоками. Размер массива настраивается. Начальная конфигурация: 32 латентных вектора размерности 512. На инференсе латентный массив кодируется в rnn_states — это позволяет sample-factory управлять его жизненным циклом.
 
-Листинг 6 — PerceiverCore: кросс-внимание и латентный массив:
-
-```python
-class PerceiverCore(ModelCore):
-    def __init__(self, cfg, input_size):
-        self.num_latents = getattr(cfg, 'perceiver_num_latents', 32)
-        self.d_latents = getattr(cfg, 'perceiver_d_latents', 512)
-        self.num_blocks = getattr(cfg, 'perceiver_num_blocks', 2)
-
-        self.state_encoder = PerceiverStateEncoder(self.num_latents, self.d_latents)
-        self.input_proj = nn.Linear(input_size, self.d_model)
-        self.latent = nn.Parameter(torch.randn(1, self.num_latents, self.d_latents) * 0.02)
-        self.pos_encoding = nn.Parameter(torch.randn(1, 1024, self.d_model) * 0.02)
-
-        self.cross_blocks = nn.ModuleList([
-            CrossAttentionBlock(self.d_latents, self.d_model, num_heads=8)
-            for _ in range(self.num_blocks)
-        ])
-        self.self_blocks = nn.ModuleList([
-            SelfAttentionBlock(self.d_latents, num_heads=8)
-            for _ in range(self.num_blocks)
-        ])
-        self.output_proj = nn.Sequential(
-            nn.LayerNorm(self.d_latents), nn.Linear(self.d_latents, self.d_model))
-        self.core_output_size = self.d_model
-
-    def forward(self, head_output, rnn_states):
-        x_data = _unpack_packed_sequence_2d(head_output).permute(1, 0, 2)
-        x_data = self.input_proj(x_data)
-        B, T, D = x_data.shape
-
-        if T > 1:  # Training
-            x_data = x_data + self.pos_encoding[:, :T, :]
-            latent = self.latent.expand(B, -1, -1)
-            for cross, self_attn in zip(self.cross_blocks, self.self_blocks):
-                latent = cross(latent, x_data)
-                latent = self_attn(latent)
-            out = self.output_proj(latent.mean(dim=1)).unsqueeze(1)
-            new_rnn_states = rnn_states
-        else:  # Inference
-            latent = self.latent.expand(B, -1, -1).detach()
-            if rnn_states.norm().item() > 1e-6:
-                latent = self.state_encoder.decode(rnn_states, B)
-            x_data = x_data + self.pos_encoding[:, :1, :]
-            latent = self.cross_blocks[0](latent, x_data)
-            latent = self.self_blocks[0](latent)
-            out = self.output_proj(latent.mean(dim=1)).unsqueeze(1)
-            new_rnn_states = self.state_encoder.encode(latent.detach())
-
-        out = out.permute(1, 0, 2)
-        x = _pack_to_2d_sequence(out.expand(T, -1, -1).contiguous(), head_output)
-        return x, new_rnn_states
-```
+Листинг В.6 — PerceiverCore (приведён в приложении В).
 
 == Система HPO на базе Optuna
 
@@ -596,7 +383,7 @@ Mamba-2 с конфигурацией trial #62 (d_model=512, d_state=128, headd
   caption: [Mamba-2 HPO: разброс между 4 seed. Seed3 показывает 19.10, остальные — 14.8–16.0. Высокая вариативность характерна для on-policy RL],
 ) <fig-mamba-var>
 
-GRU с гиперпараметрами Mamba-2 демонстрирует более высокую скорость сходимости по сравнению с остальными: 55% финальной награды набирается за первые 10M (рис. <fig-reward>). Mamba-2 демонстрирует более плавную динамику обучения, хотя разброс между seed выше. Плато GRU 250M, как видно на рис. <fig-gru-250>, наступает около 150M. Mamba-1, Transformer и Perceiver IO значительно уступают — их кривые обучения не поднимаются выше 12–13 даже за 50M шагов.
+GRU с гиперпараметрами Mamba-2 демонстрирует более высокую скорость сходимости по сравнению с остальными: 55% финальной награды набирается за первые 10M (рис. @fig-reward). Mamba-2 демонстрирует более плавную динамику обучения, хотя разброс между seed выше. Плато GRU 250M, как видно на рис. @fig-gru-250, наступает около 150M. Mamba-1, Transformer и Perceiver IO значительно уступают — их кривые обучения не поднимаются выше 12–13 даже за 50M шагов.
 
 Если расположить архитектуры по средней лучшей награде за 50M, порядок следующий: GRU с оптимизированными HP (17.86 ± 2.11, seed3 — 20.15), затем Mamba-2 HPO (16.20 ± 2.01, seed3 — 19.10), GRU baseline (13.58 ± 1.02), Mamba-1 (12.59), Perceiver IO (1.97) и Transformer (1.01). GRU 250M (22.45) превосходит остальные за счёт пятикратного увеличения шагов.
 
@@ -618,7 +405,246 @@ GRU остаётся предпочтительным выбором для on-p
 
 #show: appendixes
 
-= Приложение А. Графики обучения
+= Листинги кода
+
+== Mamba2StateEncoder
+
+```python
+class Mamba2StateEncoder:
+    """Encodes/decodes Mamba-2 internal state (conv_state + ssm_state)
+    to/from a flat tensor that fits in rnn_states."""
+
+    def __init__(self, d_ssm: int, d_conv_dim: int, nheads: int,
+                 headdim: int, d_state: int, d_conv: int):
+        self.conv_state_size = d_conv_dim * d_conv
+        self.ssm_state_size = nheads * headdim * d_state
+        self.total_size = self.conv_state_size + self.ssm_state_size
+
+    def encode(self, conv_state, ssm_state) -> torch.Tensor:
+        """Flatten conv_state (batch, d_conv_dim, d_conv)
+           and ssm_state (batch, nheads, headdim, d_state)
+           into one tensor (batch, total_size)."""
+        conv_flat = conv_state.reshape(conv_state.shape[0], -1)
+        ssm_flat = ssm_state.reshape(ssm_state.shape[0], -1)
+        return torch.cat([conv_flat, ssm_flat], dim=-1)
+
+    def decode(self, flat_state, device=None, dtype=None):
+        """Split flat tensor back into conv_state and ssm_state."""
+        batch = flat_state.shape[0]
+        conv_flat = flat_state[:, :self.conv_state_size]
+        ssm_flat = flat_state[:, self.conv_state_size:]
+        conv_state = conv_flat.reshape(batch, self.d_conv_dim, self.d_conv)
+        ssm_state = ssm_flat.reshape(batch, self.nheads, self.headdim, self.d_state)
+        return conv_state, ssm_state
+```
+
+Листинг В.1 — Mamba2StateEncoder
+
+== Mamba2Core.forward
+
+```python
+class Mamba2Core(ModelCore):
+    def forward(self, head_output, rnn_states):
+        is_seq = not torch.is_tensor(head_output)
+
+        if is_seq:
+            # Training: PackedSequence -> (T, B, D)
+            x_data = _unpack_packed_sequence_2d(head_output)
+        else:
+            # Inference: (B, D) -> (1, B, D)
+            x_data = head_output.unsqueeze(0)
+
+        # Mamba expects (B, T, D)
+        x_data = x_data.permute(1, 0, 2)
+        x_data = self.input_proj(x_data)
+
+        if is_seq:
+            # Training: process full sequence
+            if getattr(self.cfg, 'gradient_checkpointing', True):
+                x_data = self._forward_with_checkpointing(x_data)
+            else:
+                x_data = self.mamba_layers(x_data)
+        else:
+            # Inference: decode state, process one step, encode back
+            batch_size = x_data.shape[0]
+            inference_params = self._create_inference_params(batch_size)
+            self._load_states_from_rnn(inference_params, rnn_states)
+            inference_params.seqlen_offset = 1
+
+            for norm, wrapped in zip(self.mamba_norms, self.mamba_wrapped):
+                x_data = wrapped(norm(x_data),
+                               inference_params=inference_params)
+
+            new_rnn_states = self._get_inference_states(inference_params)
+
+        x_data = x_data.permute(1, 0, 2)  # back to (T, B, D)
+
+        if is_seq:
+            x = _pack_to_2d_sequence(x_data, head_output)
+            new_rnn_states = rnn_states
+        else:
+            x = x_data.squeeze(0)
+
+        return x, new_rnn_states
+```
+
+Листинг В.2 — Mamba2Core.forward
+
+== Gradient checkpointing
+
+```python
+def _forward_with_checkpointing(self, x: torch.Tensor) -> torch.Tensor:
+    from torch.utils.checkpoint import checkpoint
+
+    def segment_forward(x, norm, mamba_layer):
+        return mamba_layer(norm(x))
+
+    output = x
+    for norm, wrapped in zip(self.mamba_norms, self.mamba_wrapped):
+        output = checkpoint(
+            segment_forward,
+            output, norm, wrapped,
+            use_reentrant=False,
+        )
+    return output
+```
+
+Листинг В.3 — Gradient checkpointing
+
+== Регистрация Mamba-2 в sample-factory
+
+```python
+class Mamba2Factory:
+    __slots__ = ('_num_layers',)
+    def __init__(self, num_layers):
+        self._num_layers = num_layers
+    def __call__(self, cfg, core_input_size):
+        if cfg.use_rnn and cfg.rnn_type == 'mamba2':
+            cfg.rnn_num_layers = self._num_layers
+            return Mamba2Core(cfg, core_input_size)
+        return default_make_core_func(cfg, core_input_size)
+
+def register_mamba2(cfg=None):
+    num_layers = cfg.rnn_num_layers if cfg is not None else 1
+    factory = Mamba2Factory(num_layers)
+    global_model_factory().register_model_core_factory(factory)
+```
+
+Листинг В.4 — Регистрация Mamba-2 в sample-factory
+
+== TransformerCore
+
+```python
+class TransformerCore(ModelCore):
+    def __init__(self, cfg, input_size):
+        self.d_model = getattr(cfg, 'transformer_d_model', cfg.rnn_size)
+        self.nhead = getattr(cfg, 'transformer_nhead', 8)
+        self.num_layers = getattr(cfg, 'transformer_num_layers', cfg.rnn_num_layers)
+        self.window_size = getattr(cfg, 'transformer_window_size', 64)
+        self.dim_feedforward = getattr(cfg, 'transformer_dim_feedforward', self.d_model * 4)
+
+        self.state_encoder = TransformerStateEncoder(self.d_model, self.window_size)
+        self.layers = nn.ModuleList()
+        for _ in range(self.num_layers):
+            self.layers.append(nn.TransformerEncoderLayer(
+                d_model=self.d_model, nhead=self.nhead,
+                dim_feedforward=self.dim_feedforward,
+                dropout=0.1, activation='gelu',
+                batch_first=True, norm_first=True,
+            ))
+
+        self.input_proj = nn.Linear(input_size, self.d_model)
+        self.pos_embedding = nn.Parameter(
+            torch.randn(1, self.window_size, self.d_model) * 0.02)
+        self.core_output_size = self.d_model
+
+    def forward(self, head_output, rnn_states):
+        # unpack, project -> (B, T, D)
+        x_data = _unpack_packed_sequence_2d(head_output).permute(1, 0, 2)
+        x_data = self.input_proj(x_data)
+        B, T, D = x_data.shape
+
+        if T > 1:  # Training: causal mask
+            x_data = x_data + self.pos_embedding[:, :T, :]
+            mask = _causal_mask(T, x_data.device)
+            for norm, layer in zip(self.norms, self.layers):
+                x_data = layer(x_data, src_mask=mask)
+            out = x_data[:, -1:, :]
+            new_rnn_states = rnn_states
+        else:  # Inference: sliding window
+            buffer = self.state_encoder.decode(rnn_states, B)
+            buffer = torch.roll(buffer, shifts=-1, dims=1)
+            buffer[:, -1:, :] = x_data + self.pos_embedding[:, -1:, :]
+            mask = _causal_mask(self.window_size, x_data.device)
+            for norm, layer in zip(self.norms, self.layers):
+                buffer = layer(buffer, src_mask=mask)
+            out = buffer[:, -1:, :]
+            new_rnn_states = self.state_encoder.encode(buffer.detach())
+
+        out = out.permute(1, 0, 2)
+        x = _pack_to_2d_sequence(out.expand(T, -1, -1).contiguous(), head_output)
+        return x, new_rnn_states
+```
+
+Листинг В.5 — TransformerCore
+
+== PerceiverCore
+
+```python
+class PerceiverCore(ModelCore):
+    def __init__(self, cfg, input_size):
+        self.num_latents = getattr(cfg, 'perceiver_num_latents', 32)
+        self.d_latents = getattr(cfg, 'perceiver_d_latents', 512)
+        self.num_blocks = getattr(cfg, 'perceiver_num_blocks', 2)
+
+        self.state_encoder = PerceiverStateEncoder(self.num_latents, self.d_latents)
+        self.input_proj = nn.Linear(input_size, self.d_model)
+        self.latent = nn.Parameter(torch.randn(1, self.num_latents, self.d_latents) * 0.02)
+        self.pos_encoding = nn.Parameter(torch.randn(1, 1024, self.d_model) * 0.02)
+
+        self.cross_blocks = nn.ModuleList([
+            CrossAttentionBlock(self.d_latents, self.d_model, num_heads=8)
+            for _ in range(self.num_blocks)
+        ])
+        self.self_blocks = nn.ModuleList([
+            SelfAttentionBlock(self.d_latents, num_heads=8)
+            for _ in range(self.num_blocks)
+        ])
+        self.output_proj = nn.Sequential(
+            nn.LayerNorm(self.d_latents), nn.Linear(self.d_latents, self.d_model))
+        self.core_output_size = self.d_model
+
+    def forward(self, head_output, rnn_states):
+        x_data = _unpack_packed_sequence_2d(head_output).permute(1, 0, 2)
+        x_data = self.input_proj(x_data)
+        B, T, D = x_data.shape
+
+        if T > 1:  # Training
+            x_data = x_data + self.pos_encoding[:, :T, :]
+            latent = self.latent.expand(B, -1, -1)
+            for cross, self_attn in zip(self.cross_blocks, self.self_blocks):
+                latent = cross(latent, x_data)
+                latent = self_attn(latent)
+            out = self.output_proj(latent.mean(dim=1)).unsqueeze(1)
+            new_rnn_states = rnn_states
+        else:  # Inference
+            latent = self.latent.expand(B, -1, -1).detach()
+            if rnn_states.norm().item() > 1e-6:
+                latent = self.state_encoder.decode(rnn_states, B)
+            x_data = x_data + self.pos_encoding[:, :1, :]
+            latent = self.cross_blocks[0](latent, x_data)
+            latent = self.self_blocks[0](latent)
+            out = self.output_proj(latent.mean(dim=1)).unsqueeze(1)
+            new_rnn_states = self.state_encoder.encode(latent.detach())
+
+        out = out.permute(1, 0, 2)
+        x = _pack_to_2d_sequence(out.expand(T, -1, -1).contiguous(), head_output)
+        return x, new_rnn_states
+```
+
+Листинг В.6 — PerceiverCore
+
+= Графики обучения
 
 #figure(
   image("reward_comparison.png", width: 100%),
@@ -663,7 +689,7 @@ GRU остаётся предпочтительным выбором для on-p
   caption: [Таблица А.1 — Сводные результаты экспериментов. ᵃПосле HPO (15 trials). ᵇСредняя и std по последним 20% итераций],
 )
 
-= Приложение Б. Конфигурации экспериментов
+= Конфигурации экспериментов
 
 == Базовая конфигурация (APPO)
 

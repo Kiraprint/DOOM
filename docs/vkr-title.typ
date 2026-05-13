@@ -40,14 +40,11 @@
   
   // === БЛОК 2: Организация (14pt CAPS bold) + короткое название ===
   if organization.full != none {
-    let org-lines = ("ФЕДЕРАЛЬНОЕ ГОСУДАРСТВЕННОЕ АВТОНОМНОЕ",
-                     "ОБРАЗОВАТЕЛЬНОЕ УЧРЕЖДЕНИЕ ВЫСШЕГО ОБРАЗОВАНИЯ")
     let org-short = organization.at("short", default: none)
   
     align(center, stack(dir: ttb, spacing: 1em,
-      for line in org-lines {
-        text(size: 14pt, weight: "bold", line)
-      },
+      text(size: 14pt, weight: "bold", "ФЕДЕРАЛЬНОЕ ГОСУДАРСТВЕННОЕ АВТОНОМНОЕ"),
+      text(size: 14pt, weight: "bold", "ОБРАЗОВАТЕЛЬНОЕ УЧРЕЖДЕНИЕ ВЫСШЕГО ОБРАЗОВАНИЯ"),
       if org-short != none {
         text(size: 12pt, weight: "bold", org-short)
       }
