@@ -1,0 +1,37 @@
+flowchart TD
+  subgraph Input["Вход"]
+    X["X"]
+  end
+
+  subgraph Heads["Multi-Head (h голов)"]
+    direction LR
+    H1["Head 1<br/>Attention(Q₁,K₁,V₁)"]
+    H2["Head 2<br/>Attention(Q₂,K₂,V₂)"]
+    HD["..."]
+    HH["Head h<br/>Attention(Qₕ,Kₕ,Vₕ)"]
+  end
+
+  subgraph Proj["Проекции"]
+    LQ["Linear × 3"]
+  end
+
+  subgraph Concat["Объединение"]
+    C["Concat(head₁ ... headₕ)"]
+    WO["W_O"]
+  end
+
+  subgraph Output["Выход"]
+    OUT["MultiHead(Q,K,V) = Concat(head_i) · W_O"]
+  end
+
+  X --> LQ
+  LQ --> H1
+  LQ --> H2
+  LQ --> HD
+  LQ --> HH
+  H1 --> C
+  H2 --> C
+  HD --> C
+  HH --> C
+  C --> WO
+  WO --> OUT

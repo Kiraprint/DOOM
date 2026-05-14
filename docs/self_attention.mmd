@@ -1,0 +1,30 @@
+flowchart TD
+  subgraph Input["Вход"]
+    VHOD["X"]
+  end
+
+  subgraph Projections["Проекции"]
+    Q["Q = X · W_Q"]
+    K["K = X · W_K"]
+    V["V = X · W_V"]
+  end
+
+  subgraph Score["Вычисление весов"]
+    S["Score = Q · K^T"]
+    SCALE["Scale: ÷ √d_k"]
+    SM["softmax"]
+  end
+
+  subgraph Output["Выход"]
+    ATT["Attention = softmax(QK^T/√d_k) · V"]
+  end
+
+  VHOD --> Q
+  VHOD --> K
+  VHOD --> V
+  Q --> S
+  K --> S
+  S --> SCALE
+  SCALE --> SM
+  SM --> ATT
+  V --> ATT

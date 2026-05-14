@@ -1,0 +1,31 @@
+flowchart TD
+  subgraph Legend["Условные обозначения"]
+    L1["■ Сохраняется в VRAM"]
+    L2["□ Пересчитывается на backward"]
+  end
+
+  subgraph Without["Без Gradient Checkpointing"]
+    direction TB
+    F1["forward: Layer 1"] --> F2["forward: Layer 2"] --> FN["forward: Layer N"]
+    S1["■ активация Layer 1"]
+    S2["■ активация Layer 2"]
+    SN["■ активация Layer N"]
+    B1["backward: Layer N"] --> B2["backward: Layer 2"] --> B3["backward: Layer 1"]
+    S1 -.->|"хранится"| B3
+    SN -.->|"хранится"| B1
+    VRAM1["VRAM: 100% (эталон)"]
+    TIME1["Время forward: эталон"]
+  end
+
+  subgraph With["С Gradient Checkpointing"]
+    direction TB
+    G1["forward: Layer 1"] --> G2["forward: Layer 2"] --> GN["forward: Layer N"]
+    NS1["□ активация Layer 1 (не сохранена)"]
+    NSN["□ активация Layer N (не сохранена)"]
+    GB1["backward: Layer N"] -->|"требует активацию N"| GR1["□ пересчет Layer N"]
+    GR1 --> GB1
+    GB1 --> GB2["backward: Layer 2"] -->|"требует активацию 1"| GR2["□ пересчет Layer 1"]
+    GR2 --> GB3["backward: Layer 1"]
+    VRAM2["VRAM: ~50%"]
+    TIME2["Время forward: +20-30%"]
+  end

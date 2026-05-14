@@ -1,0 +1,28 @@
+flowchart TD
+  subgraph Inputs["Входы"]
+    X["x_t"]
+    H["h_{t-1}"]
+  end
+
+  subgraph Gates["Вентили"]
+    R["r_t = sigmoid(W_r · [h_{t-1}, x_t])<br/>Reset gate"]
+    Z["z_t = sigmoid(W_z · [h_{t-1}, x_t])<br/>Update gate"]
+  end
+
+  subgraph Candidate["Кандидат состояния"]
+    HT["h̃_t = tanh(W_h · [r_t ⊙ h_{t-1}, x_t])"]
+  end
+
+  subgraph Output["Выход"]
+    HNEW["h_t = (1 - z_t) ⊙ h_{t-1} + z_t ⊙ h̃_t"]
+  end
+
+  X --> R
+  X --> Z
+  H --> R
+  H --> Z
+  H --> HT
+  R -->|"⊙"| HT
+  Z --> HNEW
+  HT --> HNEW
+  H --> HNEW

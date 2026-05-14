@@ -1,0 +1,28 @@
+flowchart LR
+  subgraph Search["Search Space"]
+    D1["d_model: 256/512/1024"]
+    D2["d_state: 64/128"]
+    D3["headdim: 64/128"]
+    D4["lr: 1e-5..1e-3"]
+    D5["weight_decay: 0..0.1"]
+  end
+
+  subgraph Sampler["TPE Sampler"]
+    TPE["Tree Parzen Estimator"]
+  end
+
+  subgraph Trial["Trial (50M steps)"]
+    SUB["Обучение 50M шагов"]
+    ASHA["ASHA pruning after 10 epochs"]
+    SUB -->|median check| ASHA
+  end
+
+  subgraph Result["Result"]
+    BEST["best_reward + config"]
+  end
+
+  Search --> Sampler
+  Sampler -->|hyperparameters| Trial
+  Trial -- pruned 54% --> Sampler
+  Trial -- completed 46% --> Result
+  Result -- update model --> Sampler

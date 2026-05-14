@@ -1,0 +1,29 @@
+flowchart TD
+  subgraph Input["Вход"]
+    HO["head_output<br/>(B, T, 512)"]
+    IP["Input proj<br/>Linear(512 → d_model)"]
+  end
+
+  subgraph Latent["Латентный массив"]
+    LA["Latent Array<br/>32 × 512 (learnable)"]
+  end
+
+  subgraph CrossAttn["Кросс-внимание"]
+    CA["Q = Latent (32×512)<br/>K, V = Input (T×d_model)"]
+    NOTE1["Размер латентного массива (32)<br/>не зависит от длины входа (T)"]
+    NOTE2["Стоимость: O(32·T) + O(32²)"]
+  end
+
+  subgraph Transformer["Обработка"]
+    SA["Self-Attention + FFN<br/>Transformer блоки"]
+  end
+
+  subgraph Output["Выход"]
+    OUT["Output → PolicyHead"]
+  end
+
+  HO --> IP
+  IP --> CrossAttn
+  LA --> CrossAttn
+  CrossAttn --> SA
+  SA --> OUT

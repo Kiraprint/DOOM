@@ -1,0 +1,29 @@
+flowchart LR
+  subgraph Encoder["Mamba2StateEncoder (serialize)"]
+    direction TB
+    CONV["conv_state<br/>(batch, d_conv_dim, d_conv)<br/>4 × d_model (=512) = 2048"]
+    SSM["ssm_state<br/>(batch, nheads, headdim, d_state)<br/>8 × 128 × 128 = 131072"]
+    CONCAT["reshape + concat"]
+    CONV --> CONCAT
+    SSM --> CONCAT
+  end
+
+  subgraph Queue["Sample Factory Queue"]
+    RN["rnn_states<br/>(batch, 1, total_size)"]
+  end
+
+  subgraph Decoder["Mamba2StateDecoder (deserialize)"]
+    SPLIT["split + reshape"]
+    CONV2["conv_state + ssm_state"]
+    SPLIT --> CONV2
+  end
+
+  subgraph Detect["Episode Boundary Detection"]
+    L2["L2-norm проверка"]
+    THRESH["norm < 1e-6 → состояние обнулено<br/>→ инициализация нового conv_state + ssm_state"]
+    L2 --> THRESH
+  end
+
+  CONCAT -->|"serialize"| RN
+  RN -->|"next step"| SPLIT
+  SPLIT -->|"decode"| CONV2

@@ -1,0 +1,28 @@
+flowchart TD
+  subgraph Workers["8 × PolicyWorkers"]
+    direction TB
+    W1["PolicyWorker 1"]
+    W8["PolicyWorker 8"]
+    subgraph Each["Each worker"]
+      ENV1["ViZDoom (8 envs)"]
+      CNN["CNNEncoder<br/>VizdoomEncoder<br/>obs 4×640×480 → features 512"]
+    end
+  end
+
+  subgraph Memory["ModelCore (подключаемый модуль памяти)"]
+    direction TB
+    GRU["GRU (baseline)<br/>GRUCell, recurrence=32"]
+    MB2["Mamba-2<br/>Mamba2Core, d_state=128"]
+    TF["Transformer<br/>TransformerCore, окно 64"]
+    PC["Perceiver IO<br/>PerceiverCore, латент 32"]
+  end
+
+  subgraph Learner["Learner (GPU / APPO)"]
+    PH["PolicyHead / ValueHead<br/>Linear(512,|A|) → softmax<br/>Linear(512,1) → value"]
+  end
+
+  WORKERS["PolicyModel (контейнер)"] -->|forward| Memory
+  Memory -->|output| PH
+  Memory <-->|rnn_states| Q[("Queue<br/>rnn_states (управление SF)")]
+  Workers -->|obs| CNN
+  CNN -->|features B,T,512| WORKERS
