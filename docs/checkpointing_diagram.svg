@@ -1,40 +1,40 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 650 340" font-family="'Times New Roman',Times,serif" font-size="11">
 <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4B5563"/></marker></defs>
 <rect x="0" y="0" width="650" height="340" fill="#fafbfc" rx="4"/>
-<text x="325" y="22" text-anchor="middle" font-weight="bold" font-size="13" fill="#1e3a5f">Gradient Checkpointing: kak ekonomit VRAM</text>
-<text x="325" y="42" text-anchor="middle" font-size="9" fill="#475569">Bez checkpointinga (levo): vse promezhutochnye aktivacii hranyatsya dlya obratnogo prohoda</text>
-<text x="325" y="56" text-anchor="middle" font-size="9" fill="#475569">S checkpointingom (pravo): aktivacii ne hranyatsya, a pereschityvayutsya pri backward</text>
+<text x="325" y="22" text-anchor="middle" font-weight="bold" font-size="13" fill="#1e3a5f">Gradient Checkpointing: как экономить VRAM</text>
+<text x="325" y="42" text-anchor="middle" font-size="9" fill="#475569">Без checkpointing (слева): все промежуточные активации хранятся для обратного прохода</text>
+<text x="325" y="56" text-anchor="middle" font-size="9" fill="#475569">С checkpointing (справа): активации не хранятся, а пересчитываются при backward</text>
 
 <!-- Left: without checkpointing -->
 <rect x="30" y="80" width="280" height="230" rx="4" fill="#fef2f2" stroke="#ef4444" stroke-width="1.5"/>
-<text x="170" y="100" text-anchor="middle" font-weight="bold" font-size="12" fill="#b91c1c">Bez checkpointinga</text>
+<text x="170" y="100" text-anchor="middle" font-weight="bold" font-size="12" fill="#b91c1c">Без checkpointing</text>
 <rect x="60" y="115" width="100" height="35" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="1"/><text x="110" y="137" text-anchor="middle" font-size="9" fill="#1e40af">Layer 1</text>
 <line x1="110" y1="150" x2="110" y2="170" stroke="#4B5563" stroke-width="1" marker-end="url(#a)"/>
 <rect x="60" y="175" width="100" height="35" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="1"/><text x="110" y="197" text-anchor="middle" font-size="9" fill="#1e40af">Layer 2</text>
 <line x1="110" y1="210" x2="110" y2="230" stroke="#4B5563" stroke-width="1" marker-end="url(#a)"/>
 <rect x="60" y="235" width="100" height="35" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="1"/><text x="110" y="257" text-anchor="middle" font-size="9" fill="#1e40af">Layer N</text>
 <rect x="210" y="130" width="80" height="110" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
-<text x="250" y="160" text-anchor="middle" font-size="8" fill="#b45309">Hranitsya</text><text x="250" y="174" text-anchor="middle" font-size="8" fill="#b45309">vse aktivacii</text>
-<text x="250" y="194" text-anchor="middle" font-size="8" fill="#b45309">forwarda</text>
-<text x="250" y="214" text-anchor="middle" font-size="8" fill="#b45309">dlya backward</text>
+<text x="250" y="160" text-anchor="middle" font-size="8" fill="#b45309">Хранятся</text><text x="250" y="174" text-anchor="middle" font-size="8" fill="#b45309">все активации</text>
+<text x="250" y="194" text-anchor="middle" font-size="8" fill="#b45309">forward</text>
+<text x="250" y="214" text-anchor="middle" font-size="8" fill="#b45309">для backward</text>
 <line x1="160" y1="185" x2="210" y2="185" stroke="#9CA3AF" stroke-width="0.8" stroke-dasharray="3,3" marker-end="url(#a)"/>
-<text x="170" y="290" text-anchor="middle" font-size="10" font-weight="bold" fill="#b91c1c">VRAM: 100% (etapont)</text>
-<text x="170" y="305" text-anchor="middle" font-size="9" fill="#b91c1c">+50% vremeni na forward</text>
+<text x="170" y="290" text-anchor="middle" font-size="10" font-weight="bold" fill="#b91c1c">VRAM: 100% (эталон)</text>
+<text x="170" y="305" text-anchor="middle" font-size="9" fill="#b91c1c">+50% времени на forward</text>
 
 <!-- Right: with checkpointing -->
 <rect x="340" y="80" width="280" height="230" rx="4" fill="#f0fdf4" stroke="#10b981" stroke-width="1.5"/>
-<text x="480" y="100" text-anchor="middle" font-weight="bold" font-size="12" fill="#047857">S checkpointingom</text>
+<text x="480" y="100" text-anchor="middle" font-weight="bold" font-size="12" fill="#047857">С checkpointing</text>
 <rect x="370" y="115" width="100" height="35" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="1"/><text x="420" y="137" text-anchor="middle" font-size="9" fill="#1e40af">Layer 1</text>
 <line x1="420" y1="150" x2="420" y2="170" stroke="#4B5563" stroke-width="1" marker-end="url(#a)"/>
 <rect x="370" y="175" width="100" height="35" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="1"/><text x="420" y="197" text-anchor="middle" font-size="9" fill="#1e40af">Layer 2</text>
 <line x1="420" y1="210" x2="420" y2="230" stroke="#4B5563" stroke-width="1" marker-end="url(#a)"/>
 <rect x="370" y="235" width="100" height="35" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="1"/><text x="420" y="257" text-anchor="middle" font-size="9" fill="#1e40af">Layer N</text>
 <rect x="510" y="130" width="80" height="110" rx="4" fill="#d1fae5" stroke="#10b981" stroke-width="1"/>
-<text x="550" y="160" text-anchor="middle" font-size="8" fill="#047857">Ne hranyatsya</text>
-<text x="550" y="174" text-anchor="middle" font-size="8" fill="#047857">aktivacii</text>
-<text x="550" y="194" text-anchor="middle" font-size="8" fill="#047857">pereschityvayutsya</text>
-<text x="550" y="214" text-anchor="middle" font-size="8" fill="#047857">na backward</text>
+<text x="550" y="160" text-anchor="middle" font-size="8" fill="#047857">Не хранятся</text>
+<text x="550" y="174" text-anchor="middle" font-size="8" fill="#047857">активации</text>
+<text x="550" y="194" text-anchor="middle" font-size="8" fill="#047857">пересчитываются</text>
+<text x="550" y="214" text-anchor="middle" font-size="8" fill="#047857">на backward</text>
 <line x1="470" y1="185" x2="510" y2="185" stroke="#9CA3AF" stroke-width="0.8" stroke-dasharray="3,3" marker-end="url(#a)"/>
 <text x="480" y="290" text-anchor="middle" font-size="10" font-weight="bold" fill="#047857">VRAM: -50%</text>
-<text x="480" y="305" text-anchor="middle" font-size="9" fill="#047857">+20-30% vremeni (pereschet)</text>
+<text x="480" y="305" text-anchor="middle" font-size="9" fill="#047857">+20-30% времени (пересчет)</text>
 </svg>

@@ -1,20 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 510" font-family="'Times New Roman',Times,serif" font-size="11">
 <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4B5563"/></marker></defs>
 <rect x="0" y="0" width="720" height="510" fill="#fafbfc" rx="4"/>
-<text x="360" y="22" text-anchor="middle" font-weight="bold" font-size="13" fill="#1e3a5f">Mamba-2: selektivnyj SSM-blok</text>
+<text x="360" y="22" text-anchor="middle" font-weight="bold" font-size="13" fill="#1e3a5f">Mamba-2: селективный SSM-блок</text>
 <rect x="30" y="50" width="100" height="35" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/><text x="80" y="72" text-anchor="middle" font-weight="bold" fill="#1e40af">x_t</text>
 <rect x="170" y="50" width="100" height="35" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="1.5"/><text x="220" y="72" text-anchor="middle" font-weight="bold" fill="#4338ca">Conv1d</text>
 <line x1="130" y1="67" x2="170" y2="67" stroke="#4B5563" stroke-width="1.5" marker-end="url(#a)"/>
 <rect x="310" y="50" width="80" height="35" rx="4" fill="#fce7f3" stroke="#ec4899" stroke-width="1.5"/><text x="350" y="72" text-anchor="middle" font-weight="bold" fill="#be185d">SiLU</text>
 <line x1="270" y1="67" x2="310" y2="67" stroke="#4B5563" stroke-width="1.5" marker-end="url(#a)"/>
 <rect x="170" y="120" width="280" height="100" rx="6" fill="#f0fdf4" stroke="#10b981" stroke-width="1.5"/>
-<text x="310" y="142" text-anchor="middle" font-weight="bold" fill="#047857">Selektivnoe SSM</text>
+<text x="310" y="142" text-anchor="middle" font-weight="bold" fill="#047857">Селективное SSM</text>
 <text x="310" y="160" text-anchor="middle" font-size="9" fill="#047857">h_t = A_bar * h_{t-1} + B_bar * x_t</text>
 <text x="310" y="178" text-anchor="middle" font-size="9" fill="#047857">y_t = C * h_t + D * x_t</text>
 <text x="310" y="196" text-anchor="middle" font-size="9" fill="#047857">A_bar=exp(Delta*A), B_bar=(Delta*A)^-1(exp(Delta*A)-I)*Delta*B</text>
 <line x1="350" y1="85" x2="310" y2="120" stroke="#4B5563" stroke-width="1.5" marker-end="url(#a)"/>
 <rect x="490" y="50" width="200" height="80" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
-<text x="590" y="70" text-anchor="middle" font-weight="bold" fill="#b45309">Selektivnost</text>
+<text x="590" y="70" text-anchor="middle" font-weight="bold" fill="#b45309">Селективность</text>
 <text x="590" y="88" text-anchor="middle" font-size="9" fill="#b45309">B = proj_B(x_t)</text>
 <text x="590" y="103" text-anchor="middle" font-size="9" fill="#b45309">C = proj_C(x_t)</text>
 <text x="590" y="118" text-anchor="middle" font-size="9" fill="#b45309">Delta = softplus(proj_D(x_t))</text>
@@ -27,9 +27,9 @@
 <line x1="660" y1="160" x2="650" y2="170" stroke="#9CA3AF" stroke-width="0.8" stroke-dasharray="4,3"/>
 <rect x="630" y="50" width="70" height="30" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="1"/><text x="665" y="69" text-anchor="middle" font-size="9" fill="#1e40af">y_t</text>
 <rect x="30" y="270" width="660" height="100" rx="4" fill="#f8fafc" stroke="#e2e8f0" stroke-width="0.5"/>
-<text x="50" y="290" font-weight="bold" font-size="10" fill="#1e3a5f">Discretizaciya (Zero-Order Hold):</text>
-<text x="50" y="308" font-size="9" fill="#475569">* Nepreryvnaya sistema: h'(t) = A * h(t) + B * x(t), y(t) = C * h(t) + D * x(t)</text>
-<text x="50" y="324" font-size="9" fill="#475569">* Diskretnaya: h_t = A_bar * h_{t-1} + B_bar * x_t</text>
+<text x="50" y="290" font-weight="bold" font-size="10" fill="#1e3a5f">Дискретизация (Zero-Order Hold):</text>
+<text x="50" y="308" font-size="9" fill="#475569">* Непрерывная система: h'(t) = A * h(t) + B * x(t), y(t) = C * h(t) + D * x(t)</text>
+<text x="50" y="324" font-size="9" fill="#475569">* Дискретная: h_t = A_bar * h_{t-1} + B_bar * x_t</text>
 <text x="50" y="340" font-size="9" fill="#475569">* A_bar = exp(Delta*A), B_bar = (Delta*A)^-1(exp(Delta*A)-I) * Delta*B</text>
-<text x="50" y="358" font-size="9" fill="#475569">* V Mamba-2 Delta = softplus(Linear(x_t)) -- SSM input-dependent, model sama reshaet kogda obnovlyat sostoyanie</text>
+<text x="50" y="358" font-size="9" fill="#475569">* V Mamba-2 Delta = softplus(Linear(x_t)) -- SSM input-dependent, модель сама решает когда обновлять состояние</text>
 </svg>

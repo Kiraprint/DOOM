@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 650 400" font-family="'Times New Roman',Times,serif" font-size="11">
 <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4B5563"/></marker></defs>
 <rect x="0" y="0" width="650" height="400" fill="#fafbfc" rx="4"/>
-<text x="325" y="22" text-anchor="middle" font-weight="bold" font-size="13" fill="#1e3a5f">Perceiver IO: kross-vnimanie i latentnyj massiv</text>
+<text x="325" y="22" text-anchor="middle" font-weight="bold" font-size="13" fill="#1e3a5f">Perceiver IO: кросс-внимание и латентный массив</text>
 <rect x="30" y="60" width="140" height="40" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
 <text x="100" y="80" text-anchor="middle" font-weight="bold" fill="#1e40af">head_output</text><text x="100" y="93" text-anchor="middle" font-size="8" fill="#1e40af">(B, T, 512)</text>
 <rect x="230" y="60" width="120" height="40" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="1.5"/>
@@ -21,7 +21,7 @@
 <text x="510" y="210" text-anchor="middle" font-weight="bold" fill="#1e40af">Output</text><text x="510" y="223" text-anchor="middle" font-size="8" fill="#1e40af">- PolicyHead</text>
 <line x1="410" y1="275" x2="510" y2="220" stroke="#4B5563" stroke-width="1.5" marker-end="url(#a)"/>
 <rect x="40" y="330" width="570" height="55" rx="4" fill="#f8fafc" stroke="#e2e8f0" stroke-width="0.5"/>
-<text x="50" y="348" font-weight="bold" font-size="10" fill="#1e3a5f">Kluchevoe svojstvo:</text>
-<text x="50" y="366" font-size="9" fill="#475569">* Razmer latentnogo massiva (32) ne zavisit ot dliny vhodnoj posledovatelnosti (T)</text>
-<text x="50" y="382" font-size="9" fill="#475569">* Vychislitelnaya stoimost: O(32*T) dlya kross-vnimaniya + O(32^2) dlya samovnimaniya</text>
+<text x="50" y="348" font-weight="bold" font-size="10" fill="#1e3a5f">Ключевое свойство:</text>
+<text x="50" y="366" font-size="9" fill="#475569">* Размер латентного массива (32) не зависит от длины входной последовательности (T)</text>
+<text x="50" y="382" font-size="9" fill="#475569">* Вычислительная стоимость: O(32*T) для кросс-внимания + O(32²) для самовнимания</text>
 </svg>
