@@ -1,0 +1,7 @@
+/* Scale up Mermaid diagram text for A4 thesis readability */
+#container svg text { font-size: 15px !important; }
+#container svg .label text { font-size: 14px !important; }
+#container svg .node text { font-size: 14px !important; }
+#container svg .cluster-label text { font-size: 15px !important; font-weight: bold !important; }
+#container svg .edgeLabel text { font-size: 12px !important; }
+#container svg .edgeLabel .label text { font-size: 12px !important; }
