@@ -33,6 +33,55 @@
 // Межстрочный интервал 1.5, без отступов между абзацами
 #set par(leading: 1em, spacing: 1em)
 
+// Для подписей таблиц и рисунков — одинарный межстрочный
+#show figure.caption: set par(leading: 0.65em)
+
+// Форматирование таблиц по ГОСТ: повтор шапки и подпись
+// "Продолжение таблицы" на разрыве страниц
+#let vkr-table-last-fig = state("vkr-table-last-fig", 0)
+
+#show table.cell.where(y: 0): it => {
+  context {
+    let fig-num = counter(figure.where(kind: table)).get().first()
+    let last-fig = vkr-table-last-fig.get()
+    vkr-table-last-fig.update(fig-num)
+    if fig-num == last-fig {
+      it
+    } else {
+      table.cell(stroke: none, fill: none, inset: 0pt)[#v(0pt)]
+    }
+  }
+}
+
+#let vkr-table(
+  columns: auto,
+  headers: (),
+  caption: [],
+  ..rows,
+) = {
+  let count = headers.len()
+  let bold-headers = headers.map(h => text(weight: "bold", h))
+
+  figure(
+    table(
+      columns: columns,
+      stroke: 0.5pt + black,
+      inset: 8pt,
+      table.header(
+        table.cell(colspan: count, stroke: none,
+          align(right,
+            context [Продолжение таблицы #counter(figure.where(kind: table)).display()],
+          ),
+        ),
+        ..bold-headers,
+      ),
+      ..rows,
+    ),
+    kind: table,
+    caption: caption,
+  )
+}
+
 // Убираем отступы вокруг заголовков (по умолчанию 2em сверху и снизу)
 #show heading: set block(below: 1em, above: 1em)
 
@@ -47,18 +96,6 @@
 // Заголовки 3+ уровня — обычным шрифтом (не жирным)
 #show heading.where(level: 3): set text(weight: "regular")
 #show heading.where(level: 4): set text(weight: "regular")
-
-#abstract(
-  "нейросетевой агент",
-  "визуальная навигация",
-  "обучение с подкреплением",
-  "Mamba-2",
-  "ViZDoom",
-  "рейнфорсмент-обучение",
-  "селективные модели пространства состояний",
-)[
-  Для RL-агента в ViZDoom сравнили четыре архитектуры памяти: GRU, Transformer, Mamba-2 и Perceiver IO. Модуль памяти подключается через интерфейс ModelCore — энкодер и декодер не меняются. Mamba-2 потребовала доработок: сериализации conv_state + ssm_state в rnn_states и gradient checkpointing, иначе on-policy обучение не работало. Гиперпараметры Mamba-2 подбирались байесовской оптимизацией (85 trials). После 50M шагов лучший результат показал GRU c HP от Mamba-2 — 17.86 ± 2.11, это на 31% выше стандартного GRU (13.58 ± 1.02). Сама Mamba-2 вышла на 16.20 ± 2.01. GRU 250M добрался до 22.45 — после 150M шагов рост прекратился. Transformer, Mamba-1 и Perceiver IO отстали существенно: 1.01, 12.59 и 1.97 соответственно.
-]
 
 #outline(title: "Содержание")
 
@@ -134,19 +171,17 @@ Decision Mamba — альтернативный подход, где SSM исп�
 
 APPO выбран по трём причинам. Первая — асинхронный сбор опыта: workers не ждут learner, GPU загружен постоянно. Вторая — ModelCore: любую архитектуру памяти можно вставить, не трогая цикл обучения. Третья — под doom_benchmark есть baseline от авторов фреймворка @petrenko2020samplefactory, с чем сравнивать результаты.
 
-#figure(
-  table(
-    inset: 8pt,
-    columns: 4,
-    [Критерий], [PPO], [SAC], [APPO],
-    [Тип], [on-policy], [off-policy], [on-policy],
-    [Стабильность], [Высокая], [Средняя], [Высокая],
-    [Параллелизм], [Нет], [Нет], [Асинхронный],
-    [Буфер опыта], [Нет], [Replay buffer], [Нет],
-    [VRAM], [Умеренное], [Высокое], [Умеренное],
-  ),
+#vkr-table(
+  columns: 4,
+  headers: ("Критерий", "PPO", "SAC", "APPO"),
   caption: [Сравнение RL-алгоритмов],
-) <tab-rl-algo>
+  [Тип], [on-policy], [off-policy], [on-policy],
+  [Стабильность], [Высокая], [Средняя], [Высокая],
+  [Параллелизм], [Нет], [Нет], [Асинхронный],
+  [Буфер опыта], [Нет], [Replay buffer], [Нет],
+  [VRAM], [Умеренное], [Высокое], [Умеренное],
+)
+<tab-rl-algo>
 
 === ViZDoom как исследовательская платформа
 
@@ -176,7 +211,7 @@ $ bold(h)_t = (1 - z_t) * bold(h)_{t-1} + z_t * tilde(h)_t $
 
 #figure(
   image("gru_cell.svg", width: 80%),
-  caption: [Структура GRU-ячейки. Вход $x_t$ и предыдущее скрытое состояние $bold(h)_{t-1}$ конкатенируются и подаются на вентили $r_t$ (сброс) и $z_t$ (обновление). Выход $bold(h)_t$ — взвешенная сумма старого состояния и нового кандидата.],
+  caption: [Структура GRU-ячейки: вход $x_t$ и скрытое состояние $bold(h)_{t-1}$ подаются на вентили $r_t$ и $z_t$, выход — взвешенная сумма старого состояния и кандидата.],
 ) <fig-gru>
 
 В RL GRU прижился из-за предсказуемости: градиенты не взрываются, скрытое состояние 512 элементов занимает 2~КБ на среду, тысяча параллельных агентов не создаёт проблем с памятью. BPTT, recurrence=32. В Sample Factory GRU стоит по умолчанию @petrenko2020samplefactory, и он же выступает в качестве baseline.
@@ -193,7 +228,7 @@ $ "Attention"(Q, K, V) = "softmax"(Q K^top / sqrt(d_k)) V $
 
 #figure(
   image("self_attention.svg", width: 80%),
-  caption: [Scaled dot-product attention: вход $X$ проецируется в $Q$, $K$, $V$; вычисляется матрица попарных весов $Q K^top$; после масштабирования и $"softmax"$ получаем взвешенную сумму значений $V$.],
+  caption: [Scaled dot-product attention: $X$ проецируется в $Q$, $K$, $V$; веса $Q K^top$ масштабируются, $"softmax"$, взвешенная сумма $V$.],
 ) <fig-attn>
 
 Multi-head attention расширяет механизм, выполняя несколько операций внимания параллельно:
@@ -241,7 +276,7 @@ $ B = f_B(x_t), quad C = f_C(x_t), quad Delta = "softplus"(f_Delta(x_t)) $
 
 #figure(
   image("mamba2_block.svg", width: 95%),
-  caption: [Структура селективного SSM-блока Mamba-2. Вход проходит через Conv1d и SiLU, затем поступает в селективное SSM, где параметры $B$, $C$, $Delta$ вычисляются от входа. Residual-соединение и RMSNorm завершают блок.],
+  caption: [Структура SSM-блока Mamba-2: вход → Conv1d + SiLU → селективный SSM (параметры $B$, $C$, $Delta$ зависят от входа) → Residual + RMSNorm.],
 ) <fig-mamba2>
 
 Архитектурно Mamba-2 состоит из: (1) дискретной свёртки (conv1d) с ядром 4, (2) нелинейности SiLU, (3) селективного SSM-ядра на Triton, (4) residual-соединения и RMSNorm. Сложность — $O(L)$, на длинных последовательностях Mamba-2 быстрее трансформера за счёт линейной рекурренты.
@@ -288,25 +323,23 @@ $ Z_{l+1} = "LayerNorm"( "TransformerBlock"(Z_l) ) $
 
 #figure(
   image("perceiver_cross_attn.svg", width: 85%),
-  caption: [Архитектура Perceiver IO: head_output проецируется, затем через кросс-внимание сжимается в латентный массив (32 вектора), после чего обрабатывается трансформерными блоками. Размер латентного массива не зависит от длины входа.],
+  caption: [Perceiver IO: head_output проецируется, через кросс-внимание сжимается в латентный массив (32 вектора), обрабатывается трансформерными блоками. Размер латентного массива не зависит от длины входа.],
 ) <fig-perceiver>
 
 Для визуального RL это потенциально удобно — картинка 640x480 после энкодера даёт сотни временных признаков, и Perceiver обрабатывает их с постоянной стоимостью. На практике, однако, настройка оказалась сложной: размер массива, число итераций, способ инициализации латентного пространства — всё влияет на результат, и для doom_benchmark с фиксированным размером наблюдения преимущество переменного входа не реализуется. Perceiver показал среднюю награду 1.97, что близко к случайной политике.
 
 === Сводная таблица архитектур
 
-#figure(
-  table(
-    inset: 6pt,
-    columns: (auto, auto, auto, auto, auto),
-    [Архитектура], [Сложность], [Скрытое состояние], [Параметры (d=512)], [Инференс],
-    [GRU],    [$O(L)$],     [$d$],        [$3 d^2 approx 0.8M$], [Рекуррентный],
-    [Mamba-2], [$O(L)$],   [$n_{"heads"} h d_{"state"} + d_{"conv"} d$], [$approx 2 d^2$], [Рекуррентный],
-    [Transformer], [$O(L^2)$], [$L times d$], [$4 d^2 approx 1.0M$ (4 слоя)], [Пересчёт окна],
-    [Perceiver IO], [$O(M L)$], [$M times d$], [$approx 2.5 d^2$], [Кросс-внимание],
-  ),
-  caption: [Сравнение архитектур памяти по вычислительной сложности, размеру состояния, числу параметров и типу инференса. $d = 512$ — размерность скрытого состояния, $L$ — длина последовательности, $M = 32$ — размер латентного массива Perceiver.],
-) <tab-arch-compare>
+#vkr-table(
+  columns: (auto, auto, auto, auto, auto),
+  headers: ("Архитектура", "Сложность", "Скрытое состояние", "Параметры (d=512)", "Инференс"),
+  caption: [Сравнение архитектур памяти по сложности, размеру состояния, параметрам и типу инференса. $d = 512$, $L$ — длина последовательности, $M = 32$.],
+  [GRU],    [$O(L)$],     [$d$],        [$3 d^2 approx 0.8M$], [Рекуррентный],
+  [Mamba-2], [$O(L)$],   [$n_{"heads"} h d_{"state"} + d_{"conv"} d$], [$approx 2 d^2$], [Рекуррентный],
+  [Transformer], [$O(L^2)$], [$L times d$], [$4 d^2 approx 1.0M$ (4 слоя)], [Пересчёт окна],
+  [Perceiver IO], [$O(M L)$], [$M times d$], [$approx 2.5 d^2$], [Кросс-внимание],
+)
+<tab-arch-compare>
 
 === Обоснование выбора архитектур для сравнения
 
@@ -350,7 +383,7 @@ ModelCore определяет два метода: forward принимает h
 
 #figure(
   image("architecture_diagram.svg", width: 100%),
-  caption: [Архитектура PolicyModel со сменным модулем памяти. Показаны четыре реализации ModelCore: GRU (встроенный baseline sample-factory), Mamba-2, Transformer и Perceiver IO (кастомные). CNNEncoder и PolicyHead/ValueHead фиксированы. Снизу — контекст интеграции в тренировочный цикл Sample Factory],
+  caption: [Архитектура PolicyModel со сменным модулем памяти: GRU, Mamba-2, Transformer и Perceiver IO. CNNEncoder и PolicyHead/ValueHead фиксированы. Интеграция в тренировочный цикл Sample Factory.],
 ) <fig-arch>
 
 == Реализация Mamba2Core
@@ -365,7 +398,7 @@ Mamba2StateEncoder (листинг В.1) сериализует conv_state ($d_"
 
 #figure(
   image("mamba2_state_flow.svg", width: 95%),
-  caption: [Поток кодирования и декодирования состояния Mamba-2. conv_state и ssm_state сериализуются в плоский тензор rnn_states перед отправкой в очередь Sample Factory, на следующем шаге декодируются обратно. Граница эпизода определяется по L2-норме принятого состояния.],
+  caption: [Кодирование/декодирование состояния Mamba-2: conv_state и ssm_state сериализуются в rnn_states, затем декодируются. Граница эпизода — по L2-норме состояния.],
 ) <fig-mamba-state>
 
 Граница эпизода определяется по L2-норме принятого rnn_states: если норма меньше $10^(-6)$, состояние считается обнулённым (Sample Factory сбросила его при завершении эпизода) и инициализируется заново. Порог, а не точный ноль, выбран из-за погрешностей при передаче чисел с плавающей точкой через очередь между процессами (multiprocessing.Queue).
@@ -386,7 +419,7 @@ Gradient checkpointing устраняет эту проблему: промеж�
 
 #figure(
   image("checkpointing_diagram.svg", width: 85%),
-  caption: [Сравнение прямого и обратного проходов без gradient checkpointing (слева) и с ним (справа). Без checkpointing все промежуточные активации хранятся в VRAM для backward. С checkpointing активации не сохраняются, а пересчитываются при необходимости, снижая VRAM на ~50% ценой +20-30% времени.],
+  caption: [Сравнение forward/backward без gradient checkpointing (слева) и с ним (справа). Без — активации хранятся в VRAM. С — пересчитываются, VRAM −50%, время +20–30%.],
 ) <fig-checkpoint>
 
 Снижение потребления VRAM составляет приблизительно 50% при увеличении времени вычислений на 20-30%. Включается параметром gradient_checkpointing = True, каждый блок Mamba-2 обёрнут в torch.utils.checkpoint.checkpoint с флагом use_reentrant=False.
@@ -421,7 +454,7 @@ Mamba2Factory — обёртка, поддерживающая сериализ�
 
 #figure(
   image("sliding_window.svg", width: 90%),
-  caption: [Скользящее окно TransformerCore на инференсе. При поступлении нового кадра окно сдвигается, самый старый токен (t-63) вытесняется, новый (t+1) занимает последнюю позицию. Каждый шаг — полный пересчёт $O(L^2)$ внимания.],
+  caption: [Скользящее окно TransformerCore на инференсе: при новом кадре окно сдвигается, старый токен вытесняется. Полный пересчёт $O(L^2)$ внимания на каждом шаге.],
 ) <fig-sliding>
 
 Данный подход требует большего объёма вычислений по сравнению с Mamba-2 ($O(L^2)$ против $O(L)$ за шаг), но даёт доступ ко всей истории внутри окна без сжатия в вектор фиксированной размерности.
@@ -446,27 +479,25 @@ Optuna, TPE-семплер (Tree Parzen Estimator), ASHA-прунинг посл
 
 #figure(
   image("hpo_pipeline.svg", width: 90%),
-  caption: [HPO pipeline: Optuna генерирует гиперпараметры через TPE-семплер, запускает trial на 50M шагов, ASHA-прунинг отсеивает неперспективные конфигурации после 10 эпох. Из 85 trials завершились 37 (54% прерываний).],
+  caption: [HPO pipeline: Optuna (TPE-семплер) → trial на 50M шагов, ASHA-прунинг после 10 эпох. Из 85 trials завершились 37 (54% прерываний).],
 ) <fig-hpo>
 
 Проведено 85 trials по 50M шагов, из которых 37 успешно завершились (54% прерываний из-за OOM или timeout).
 
 Лучший trial #62: d_model=512, d_state=128, headdim=128, lr=4.05e-4, weight_decay=0.00196, expand=1. Mean reward 13.34, within-run std 3.14, max 16.94. Оптимизация заняла 42 минуты (2507 секунд на GPU). Все лучшие trial используют AdamW с lr~4e-4 и weight_decay~0.002.
 
-#figure(
-  table(
-    inset: 8pt,
-    columns: 4,
-    [Параметр], [Диапазон поиска], [Лучшее значение], [Влияние],
-    [$d_("model")$], [256 / 512 / 1024], [512], [Высокое],
-    [$d_("state")$], [64 / 128], [128], [Среднее],
-    [headdim], [64 / 128], [128], [Низкое],
-    [lr], [$10^(-5)..10^(-3)$], [$4.05 times 10^(-4)$], [Высокое],
-    [weight_decay], [$0..0.1$], [$1.96 times 10^(-3)$], [Среднее],
-    [expand], [1 / 2], [1], [Низкое],
-  ),
+#vkr-table(
+  columns: 4,
+  headers: ("Параметр", "Диапазон поиска", "Лучшее значение", "Влияние"),
   caption: [Пространство поиска HPO и результаты лучшего trial #62 — Mamba-2],
-) <tab-hpo>
+  [$d_("model")$], [256 / 512 / 1024], [512], [Высокое],
+  [$d_("state")$], [64 / 128], [128], [Среднее],
+  [headdim], [64 / 128], [128], [Низкое],
+  [lr], [$10^(-5)..10^(-3)$], [$4.05 times 10^(-4)$], [Высокое],
+  [weight_decay], [$0..0.1$], [$1.96 times 10^(-3)$], [Среднее],
+  [expand], [1 / 2], [1], [Низкое],
+)
+<tab-hpo>
 
 === HPO для Transformer
 
@@ -484,24 +515,22 @@ Optuna, TPE-семплер (Tree Parzen Estimator), ASHA-прунинг посл
 
 Все эксперименты — на одном ноутбуке с RTX 5090 Laptop GPU. Характеристики — в табл. @tab-hardware.
 
-#figure(
-  table(
-    inset: 6pt,
-    columns: (auto, auto, auto),
-    [Компонент], [Характеристика], [Значение],
-    [CPU], [Процессор], [Intel Ultra 9 285H (16 ядер, 22 потока)],
-    [GPU], [Видеокарта], [NVIDIA RTX 5090 Laptop GPU (24 GB VRAM)],
-    [RAM], [Оперативная память], [32 GB DDR5-5600],
-    [ОС], [Операционная система], [Linux (Ubuntu 24.04)],
-    [CUDA], [Версия CUDA], [13.0],
-    [cuDNN], [Версия cuDNN], [9.1.9],
-    [Python], [Интерпретатор], [3.13.12],
-    [PyTorch], [Фреймворк], [2.11.0+cu130],
-    [SF], [Sample Factory], [2.1.1],
-    [ViZDoom], [Среда], [1.3.0],
-  ),
+#vkr-table(
+  columns: (auto, auto, auto),
+  headers: ("Компонент", "Характеристика", "Значение"),
   caption: [Характеристики экспериментального стенда],
-) <tab-hardware>
+  [CPU], [Процессор], [Intel Ultra 9 285H (16 ядер, 22 потока)],
+  [GPU], [Видеокарта], [NVIDIA RTX 5090 Laptop GPU (24 GB VRAM)],
+  [RAM], [Оперативная память], [32 GB DDR5-5600],
+  [ОС], [Операционная система], [Linux (Ubuntu 24.04)],
+  [CUDA], [Версия CUDA], [13.0],
+  [cuDNN], [Версия cuDNN], [9.1.9],
+  [Python], [Интерпретатор], [3.13.12],
+  [PyTorch], [Фреймворк], [2.11.0+cu130],
+  [SF], [Sample Factory], [2.1.1],
+  [ViZDoom], [Среда], [1.3.0],
+)
+<tab-hardware>
 
 *Параметры обучения* — фиксированы для всех архитектур:
 - APPO, doom_benchmark, 8 workers × 8 сред = 64 параллельных среды
@@ -568,26 +597,19 @@ Mamba-2 с конфигурацией trial #62 (d_model=512, d_state=128, headd
 
 === Сводная таблица
 
-#figure(
-  table(
-    inset: 8pt,
-    columns: 7,
-    [Архитектура], [Seed], [Meanᵃ], [Stdᵇ], [Max], [FPS], [VRAM],
-    [GRU baseline], [3], [13.58], [1.02], [14.37], [24–56K], [~6 GB],
-    [GRU + Opt.HP], [3], [17.86], [2.11], [20.15], [17–25K], [~6 GB],
-    [Mamba-2 HPO], [4], [16.20], [2.01], [19.10], [15–23K], [~7 GB],
-    [Mamba-1], [1], [12.59], [—], [12.59], [37K], [~6 GB],
-    [Transformer], [1], [1.01], [—], [2.03ᶜ], [29K], [~6 GB],
-    [Perceiver IO], [1], [1.97], [—], [1.97], [8K], [~8 GB],
-    [GRU 250M], [1], [20.28ᵈ], [0.66ᵈ], [22.45], [56K], [~6 GB],
-  ),
-  caption: [
-    Сводные результаты экспериментов. ᵃMean — средняя лучшая награда по seed (best reward за обучение).
-    ᵇStd — across-seed стандартное отклонение (разброс между seed).
-    ᶜПосле HPO — 2.03 (недостаточно для практического применения).
-    ᵈGRU 250M: средняя и std по последним 20% итераций.
-  ],
-) <tab-results>
+#vkr-table(
+  columns: 7,
+  headers: ("Архитектура", "Seed", "Meanᵃ", "Stdᵇ", "Max", "FPS", "VRAM"),
+  caption: [Сводные результаты экспериментов. ᵃСредняя лучшая награда. ᵇAcross-seed std. ᶜПосле HPO. ᵈGRU 250M: по последним 20% итераций.],
+  [GRU baseline], [3], [13.58], [1.02], [14.37], [24–56K], [~6 GB],
+  [GRU + Opt.HP], [3], [17.86], [2.11], [20.15], [17–25K], [~6 GB],
+  [Mamba-2 HPO], [4], [16.20], [2.01], [19.10], [15–23K], [~7 GB],
+  [Mamba-1], [1], [12.59], [—], [12.59], [37K], [~6 GB],
+  [Transformer], [1], [1.01], [—], [2.03ᶜ], [29K], [~6 GB],
+  [Perceiver IO], [1], [1.97], [—], [1.97], [8K], [~8 GB],
+  [GRU 250M], [1], [20.28ᵈ], [0.66ᵈ], [22.45], [56K], [~6 GB],
+)
+<tab-results>
 
 == Анализ результатов
 
@@ -595,12 +617,12 @@ Mamba-2 с конфигурацией trial #62 (d_model=512, d_state=128, headd
 
 #figure(
   image("reward_comparison.png", width: 100%),
-  caption: [Сравнение кривых обучения всех архитектур на 50M шагов. Ось X — фреймы, ось Y — средняя награда за эпизод (EMA 0.99). Для архитектур с несколькими seed показан seed с максимальной наградой. Mamba-1, Transformer и Perceiver IO значительно уступают GRU и Mamba-2],
+  caption: [Кривые обучения всех архитектур на 50M шагов. Для архитектур с несколькими seed показан лучший. Mamba-1, Transformer и Perceiver IO уступают GRU и Mamba-2.],
 ) <fig-reward>
 
 #figure(
   image("gru_3seed_comparison.png", width: 100%),
-  caption: [GRU baseline против GRU с гиперпараметрами Mamba-2 (3 seed). Ось X — фреймы, ось Y — средняя награда за эпизод. Оптимизированная GRU стабильно опережает baseline на всех seed. Seed3 достигает 20.15],
+  caption: [GRU baseline vs GRU с гиперпараметрами Mamba-2 (3 seed). Оптимизированная GRU опережает baseline на всех seed (max 20.15).],
 ) <fig-gru-3s>
 
 #figure(
@@ -627,18 +649,16 @@ GRU устойчив к lr от 1e-4 до 4e-4. Mamba-2 — при отклон�
 
 Помимо качества, важны VRAM и FPS. В табл. @tab-vram — замеры core-модулей.
 
-#figure(
-  table(
-    inset: 6pt,
-    columns: (auto, auto, auto, auto),
-    [Архитектура], [Параметры], [VRAM (core)], [FPS],
-    [GRU],      [~0.8M], [0.5 GB], [24 000–56 000],
-    [Mamba-2],  [~2.1M], [1.2 GB], [15 000–23 000],
-    [Transformer], [~1.0M], [0.8 GB], [29 000],
-    [Perceiver IO], [~2.5M], [1.5 GB], [8 000],
-  ),
+#vkr-table(
+  columns: (auto, auto, auto, auto),
+  headers: ("Архитектура", "Параметры", "VRAM (core)", "FPS"),
   caption: [Потребление ресурсов core-модулями: параметры, VRAM, FPS.],
-) <tab-vram>
+  [GRU],      [~0.8M], [0.5 GB], [24 000–56 000],
+  [Mamba-2],  [~2.1M], [1.2 GB], [15 000–23 000],
+  [Transformer], [~1.0M], [0.8 GB], [29 000],
+  [Perceiver IO], [~2.5M], [1.5 GB], [8 000],
+)
+<tab-vram>
 
 GRU — самый лёгкий. Mamba-2 вдвое тяжелее из-за ssm_state (131K элементов). Perceiver IO — самый тяжёлый: 1.5 GB на core из-за латентного массива и двух механизмов внимания.
 
@@ -917,7 +937,7 @@ class PerceiverCore(ModelCore):
 
 #figure(
   image("reward_comparison.png", width: 100%),
-  caption: [Рис. А.1 — Сравнение кривых обучения всех архитектур на 50M шагов. Ось X — количество собранных фреймов, ось Y — средняя награда за эпизод],
+  caption: [Рис. А.1 — Кривые обучения всех архитектур на 50M шагов.],
 )
 
 #figure(
@@ -942,143 +962,123 @@ class PerceiverCore(ModelCore):
 
 Результаты полного обучения:
 
-#figure(
-  table(
-    inset: 8pt,
-    columns: 7,
-    [Архитектура], [Seed], [Mean], [Std], [Max], [FPS], [VRAM],
-    [GRU baseline], [3], [13.58], [1.02], [14.37], [24–56K], [~6 GB],
-    [GRU + Opt.HP], [3], [17.86], [2.11], [20.15], [17–25K], [~6 GB],
-    [Mamba-2 HPO], [4], [16.20], [2.01], [19.10], [15–23K], [~7 GB],
-    [Mamba-1], [1], [12.59], [—], [12.59], [37K], [~6 GB],
-    [Transformer], [1], [1.01], [—], [2.03ᵃ], [29K], [~6 GB],
-    [Perceiver IO], [1], [1.97], [—], [1.97], [8K], [~8 GB],
-    [GRU 250M], [1], [20.28ᵇ], [0.66ᵇ], [22.45], [56K], [~6 GB],
-  ),
-  caption: [Таблица А.1 — Сводные результаты экспериментов. ᵃПосле HPO (15 trials). ᵇСредняя и std по последним 20% итераций],
+#vkr-table(
+  columns: 7,
+  headers: ("Архитектура", "Seed", "Mean", "Std", "Max", "FPS", "VRAM"),
+  caption: [Таблица А.1 — Сводные результаты экспериментов. ᵃПосле HPO. ᵇПо последним 20% итераций.],
+  [GRU baseline], [3], [13.58], [1.02], [14.37], [24–56K], [~6 GB],
+  [GRU + Opt.HP], [3], [17.86], [2.11], [20.15], [17–25K], [~6 GB],
+  [Mamba-2 HPO], [4], [16.20], [2.01], [19.10], [15–23K], [~7 GB],
+  [Mamba-1], [1], [12.59], [—], [12.59], [37K], [~6 GB],
+  [Transformer], [1], [1.01], [—], [2.03ᵃ], [29K], [~6 GB],
+  [Perceiver IO], [1], [1.97], [—], [1.97], [8K], [~8 GB],
+  [GRU 250M], [1], [20.28ᵇ], [0.66ᵇ], [22.45], [56K], [~6 GB],
 )
 
 = Конфигурации экспериментов
 
 == Базовая конфигурация (APPO)
 
-#figure(
-  table(
-    inset: 8pt,
-    columns: 2,
-    [Параметр], [Значение],
-    [algorithm], [APPO],
-    [env], [doom_benchmark],
-    [num_workers], [8],
-    [num_envs_per_worker], [8],
-    [batch_size], [4096],
-    [rollout], [64],
-    [recurrence], [32],
-    [hidden_size], [512],
-    [rnn_num_layers], [1],
-    [learning_rate], [1e-4 (GRU) / 4.05e-4 (Mamba-2)],
-    [optimizer], [AdamW],
-    [weight_decay], [0 (GRU) / 1.96e-3 (Mamba-2)],
-    [gamma], [0.99],
-    [gae_lambda], [0.95],
-    [value_loss_coeff], [1.0],
-    [exploration_loss_coeff], [0.002 (Mamba-2)],
-    [grad_norm], [4.0],
-    [num_epochs], [1],
-    [num_minibatches], [1],
-  ),
+#vkr-table(
+  columns: 2,
+  headers: ("Параметр", "Значение"),
   caption: [Базовая конфигурация APPO],
+  [algorithm], [APPO],
+  [env], [doom_benchmark],
+  [num_workers], [8],
+  [num_envs_per_worker], [8],
+  [batch_size], [4096],
+  [rollout], [64],
+  [recurrence], [32],
+  [hidden_size], [512],
+  [rnn_num_layers], [1],
+  [learning_rate], [1e-4 (GRU) / 4.05e-4 (Mamba-2)],
+  [optimizer], [AdamW],
+  [weight_decay], [0 (GRU) / 1.96e-3 (Mamba-2)],
+  [gamma], [0.99],
+  [gae_lambda], [0.95],
+  [value_loss_coeff], [1.0],
+  [exploration_loss_coeff], [0.002 (Mamba-2)],
+  [grad_norm], [4.0],
+  [num_epochs], [1],
+  [num_minibatches], [1],
 )
 
 == Конфигурация Mamba-2 (HPO best trial #62)
 
-#figure(
-  table(
-    inset: 8pt,
-    columns: 2,
-    [Параметр], [Значение],
-    [mamba_d_model], [512],
-    [mamba_d_state], [128],
-    [mamba_headdim], [128],
-    [mamba_expand], [1],
-    [mamba_d_conv], [4],
-    [mamba_ngroups], [1],
-    [gradient_checkpointing], [True],
-    [rnn_type], [mamba2],
-    [learning_rate], [4.05e-4],
-    [weight_decay], [1.96e-3],
-    [optimizer], [AdamW],
-    [exploration_loss_coeff], [0.002],
-  ),
+#vkr-table(
+  columns: 2,
+  headers: ("Параметр", "Значение"),
   caption: [Конфигурация Mamba-2, trial #62],
+  [mamba_d_model], [512],
+  [mamba_d_state], [128],
+  [mamba_headdim], [128],
+  [mamba_expand], [1],
+  [mamba_d_conv], [4],
+  [mamba_ngroups], [1],
+  [gradient_checkpointing], [True],
+  [rnn_type], [mamba2],
+  [learning_rate], [4.05e-4],
+  [weight_decay], [1.96e-3],
+  [optimizer], [AdamW],
+  [exploration_loss_coeff], [0.002],
 )
 
 == Конфигурация TransformerCore
 
-#figure(
-  table(
-    inset: 8pt,
-    columns: 2,
-    [Параметр], [Значение],
-    [transformer_d_model], [512],
-    [transformer_nhead], [8],
-    [transformer_num_layers], [2],
-    [transformer_window_size], [64],
-    [transformer_dim_feedforward], [2048],
-    [transformer_dropout], [0.1],
-    [rnn_type], [transformer],
-  ),
+#vkr-table(
+  columns: 2,
+  headers: ("Параметр", "Значение"),
   caption: [Конфигурация TransformerCore],
+  [transformer_d_model], [512],
+  [transformer_nhead], [8],
+  [transformer_num_layers], [2],
+  [transformer_window_size], [64],
+  [transformer_dim_feedforward], [2048],
+  [transformer_dropout], [0.1],
+  [rnn_type], [transformer],
 )
 
 == Конфигурация PerceiverCore
 
-#figure(
-  table(
-    inset: 8pt,
-    columns: 2,
-    [Параметр], [Значение],
-    [perceiver_num_latents], [32],
-    [perceiver_d_latents], [512],
-    [perceiver_num_blocks], [2],
-    [perceiver_num_heads], [8],
-    [perceiver_dropout], [0.1],
-    [rnn_type], [perceiver],
-  ),
+#vkr-table(
+  columns: 2,
+  headers: ("Параметр", "Значение"),
   caption: [Конфигурация PerceiverCore],
+  [perceiver_num_latents], [32],
+  [perceiver_d_latents], [512],
+  [perceiver_num_blocks], [2],
+  [perceiver_num_heads], [8],
+  [perceiver_dropout], [0.1],
+  [rnn_type], [perceiver],
 )
 
 == Версии программного обеспечения
 
-#figure(
-  table(
-    inset: 8pt,
-    columns: 2,
-    [Компонент], [Версия],
-    [PyTorch], [2.11.0+cu130],
-    [Sample Factory], [2.1.1],
-    [ViZDoom], [1.3.0],
-    [CUDA], [13.0],
-    [cuDNN], [9.1.9],
-    [Python], [3.13.12],
-  ),
+#vkr-table(
+  columns: 2,
+  headers: ("Компонент", "Версия"),
   caption: [Версии программного обеспечения экспериментального стенда],
+  [PyTorch], [2.11.0+cu130],
+  [Sample Factory], [2.1.1],
+  [ViZDoom], [1.3.0],
+  [CUDA], [13.0],
+  [cuDNN], [9.1.9],
+  [Python], [3.13.12],
 )
 
 == Потребление видеопамяти (core-only)
 
 В табл. @tab-vram-appendix сведены результаты замеров core-модулей (энкодер и декодер в расчёт не брались). Число параметров и потребление видеопамяти не всегда коррелируют напрямую: Mamba-2 с 0.9M параметров даёт 0.40 GB, а Perceiver IO, у которого параметров больше в 16 раз, — всего 0.42 GB. SSM-сканирование вынуждено хранить conv_state и ssm_state на каждом шаге, а латентный массив Perceiver IO фиксирован (32×512) и не растёт с длиной последовательности. Полная модель даёт 5–9 GB, основная доля уходит на свёрточный энкодер с его 4096 кадрами.
 
-#figure(
-  table(
-    inset: 8pt,
-    columns: 3,
-    [Архитектура], [Параметры (core)], [VRAM (core)],
-    [GRU], [1.6M], [0.07 GB],
-    [Mamba-2], [0.9M], [0.40 GB],
-    [Mamba-1], [1.7M], [0.15 GB],
-    [Transformer], [3.2M], [0.20 GB],
-    [Perceiver IO], [14.5M], [0.42 GB],
-  ),
+#vkr-table(
+  columns: 3,
+  headers: ("Архитектура", "Параметры (core)", "VRAM (core)"),
   caption: [Потребление видеопамяти core-only (без учёта энкодера и декодера)],
-) <tab-vram-appendix>
+  [GRU], [1.6M], [0.07 GB],
+  [Mamba-2], [0.9M], [0.40 GB],
+  [Mamba-1], [1.7M], [0.15 GB],
+  [Transformer], [3.2M], [0.20 GB],
+  [Perceiver IO], [14.5M], [0.42 GB],
+)
+<tab-vram-appendix>
