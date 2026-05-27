@@ -474,68 +474,88 @@ run_gru_250m() {
 
 # ─── Mass Seed Runs ────────────────────────────────────────────────────────────
 
+run_gru_50m_seed() {
+    local seed=$1
+    local sfx=$(seed_suffix "$seed")
+    local sa=$(seed_args "$seed")
+    local exp_name="gru_baseline_50m${sfx}"
+    # shellcheck disable=SC2086
+    run_experiment "$exp_name" \
+        --optimizer adam --learning_rate 1e-4 --exploration_loss_coeff 0.001 \
+        $sa
+}
+
 run_gru_50_seeds() {
     section "GRU Baseline: 50 seeds @ 50M"
     for seed in $(seq 1 50); do
-        local sfx=$(seed_suffix "$seed")
-        local sa=$(seed_args "$seed")
-        local exp_name="gru_baseline_50m${sfx}"
-        # shellcheck disable=SC2086
-        run_experiment "$exp_name" \
-            --optimizer adam --learning_rate 1e-4 --exploration_loss_coeff 0.001 \
-            $sa
+        run_gru_50m_seed "$seed"
     done
+}
+
+run_mamba2_50m_seed() {
+    local seed=$1
+    local sfx=$(seed_suffix "$seed")
+    local sa=$(seed_args "$seed")
+    local exp_name="mamba2_hpo_best_50m${sfx}"
+    # shellcheck disable=SC2086
+    run_experiment "$exp_name" \
+        --rnn_type mamba2 \
+        --mamba_d_model 512 --mamba_d_state 128 --mamba_headdim 128 --mamba_expand 1 \
+        --optimizer adamw --learning_rate 4.05e-4 --exploration_loss_coeff 0.00202 \
+        --weight_decay 0.00196 $sa
 }
 
 run_mamba2_50_seeds() {
     section "Mamba-2 HPO Best: 50 seeds @ 50M"
     for seed in $(seq 1 50); do
-        local sfx=$(seed_suffix "$seed")
-        local sa=$(seed_args "$seed")
-        local exp_name="mamba2_hpo_best_50m${sfx}"
-        # shellcheck disable=SC2086
-        run_experiment "$exp_name" \
-            --rnn_type mamba2 \
-            --mamba_d_model 512 --mamba_d_state 128 --mamba_headdim 128 --mamba_expand 1 \
-            --optimizer adamw --learning_rate 4.05e-4 --exploration_loss_coeff 0.00202 \
-            --weight_decay 0.00196 $sa
+        run_mamba2_50m_seed "$seed"
     done
+}
+
+run_gru_250m_seed() {
+    local seed=$1
+    local sfx=$(seed_suffix "$seed")
+    local sa=$(seed_args "$seed")
+    local exp_name="gru_250m${sfx}"
+    if [ -f "$TRAIN_DIR/$exp_name/sf_log.txt" ] && grep -q "Total num frames: 249" "$TRAIN_DIR/$exp_name/sf_log.txt" 2>/dev/null; then
+        log "  SKIP $exp_name — already completed"
+        return 0
+    fi
+    # shellcheck disable=SC2086
+    run_experiment "$exp_name" \
+        --optimizer adam --learning_rate 1e-4 --exploration_loss_coeff 0.001 \
+        --train_for_env_steps 250000000 $sa
 }
 
 run_gru_250m_10_seeds() {
     section "GRU 250M: 10 seeds"
     for seed in $(seq 1 10); do
-        local sfx=$(seed_suffix "$seed")
-        local sa=$(seed_args "$seed")
-        local exp_name="gru_250m${sfx}"
-        if [ -f "$TRAIN_DIR/$exp_name/sf_log.txt" ] && grep -q "Total num frames: 249" "$TRAIN_DIR/$exp_name/sf_log.txt" 2>/dev/null; then
-            log "  SKIP $exp_name — already completed"
-            continue
-        fi
-        # shellcheck disable=SC2086
-        run_experiment "$exp_name" \
-            --optimizer adam --learning_rate 1e-4 --exploration_loss_coeff 0.001 \
-            --train_for_env_steps 250000000 $sa
+        run_gru_250m_seed "$seed"
     done
+}
+
+run_mamba2_250m_seed() {
+    local seed=$1
+    local sfx=$(seed_suffix "$seed")
+    local sa=$(seed_args "$seed")
+    local exp_name="mamba2_250m${sfx}"
+    if [ -f "$TRAIN_DIR/$exp_name/sf_log.txt" ] && grep -q "Total num frames: 249" "$TRAIN_DIR/$exp_name/sf_log.txt" 2>/dev/null; then
+        log "  SKIP $exp_name — already completed"
+        return 0
+    fi
+    # shellcheck disable=SC2086
+    run_experiment "$exp_name" \
+        --rnn_type mamba2 \
+        --mamba_d_model 512 --mamba_d_state 128 --mamba_headdim 128 --mamba_expand 1 \
+        --optimizer adamw --learning_rate 4.05e-4 --exploration_loss_coeff 0.00202 \
+        --weight_decay 0.00196 \
+        --train_for_env_steps 250000000 $sa
 }
 
 run_mamba2_250m_10_seeds() {
     section "Mamba-2 250M: 10 seeds"
     for seed in $(seq 1 10); do
-        local sfx=$(seed_suffix "$seed")
-        local sa=$(seed_args "$seed")
-        local exp_name="mamba2_250m${sfx}"
-        if [ -f "$TRAIN_DIR/$exp_name/sf_log.txt" ] && grep -q "Total num frames: 249" "$TRAIN_DIR/$exp_name/sf_log.txt" 2>/dev/null; then
-            log "  SKIP $exp_name — already completed"
-            continue
-        fi
-        # shellcheck disable=SC2086
-        run_experiment "$exp_name" \
-            --rnn_type mamba2 \
-            --mamba_d_model 512 --mamba_d_state 128 --mamba_headdim 128 --mamba_expand 1 \
-            --optimizer adamw --learning_rate 4.05e-4 --exploration_loss_coeff 0.00202 \
-            --weight_decay 0.00196 \
-            --train_for_env_steps 250000000 $sa
+        run_mamba2_250m_seed "$seed"
     done
 }
 
@@ -790,6 +810,30 @@ main() {
             ;;
         --slurm-submit)
             submit_all_experiments
+            exit 0
+            ;;
+        --gru-50m-seed[0-9]*)
+            seed=${mode#--gru-50m-seed}
+            check_env
+            run_gru_50m_seed "$seed"
+            exit 0
+            ;;
+        --mamba2-50m-seed[0-9]*)
+            seed=${mode#--mamba2-50m-seed}
+            check_env
+            run_mamba2_50m_seed "$seed"
+            exit 0
+            ;;
+        --gru-250m-seed[0-9]*)
+            seed=${mode#--gru-250m-seed}
+            check_env
+            run_gru_250m_seed "$seed"
+            exit 0
+            ;;
+        --mamba2-250m-seed[0-9]*)
+            seed=${mode#--mamba2-250m-seed}
+            check_env
+            run_mamba2_250m_seed "$seed"
             exit 0
             ;;
     esac
