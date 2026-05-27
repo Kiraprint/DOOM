@@ -33,6 +33,14 @@ LOG_FILE="reproduce_${TIMESTAMP}.log"
 
 SEED_BASE=42  # seed2 always uses this, seed3 uses this+1, etc.
 
+# SLURM config (auto-detected if on cluster)
+SLURM_GPU_PARTITION="gpu"
+SLURM_GPU_NODES="nike,kali,mars,laplas,turing,midas"
+SLURM_GPU_MEMORY="24G"  # TITAN RTX on nike/kali; 11-12GB on others
+SLURM_GPU_TIME="72:00:00"  # 3 days max
+SLURM_CPUS_PER_TASK=10
+SLURM_MEM="20G"
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOG_FILE"; }
@@ -119,7 +127,18 @@ experiments_raw += ["transformer_50m_seed1", "transformer_50m"]
 # Perceiver IO (1 seed)
 experiments_raw += ["perceiver_50m_seed1", "perceiver_50m"]
 # GRU 250M
-experiments_raw += ["doom_battle_appo_gru_250m"]
+    # GRU 250M
+    experiments_raw += ["doom_battle_appo_gru_250m"]
+    
+    # 50-seed runs (GRU baseline and Mamba-2)
+    for i in range(1, 51):
+        experiments_raw.append(f"gru_baseline_50m_seed{i}")
+        experiments_raw.append(f"mamba2_hpo_best_50m_seed{i}")
+    
+    # 250M 10-seed runs
+    for i in range(1, 11):
+        experiments_raw.append(f"gru_250m_seed{i}")
+        experiments_raw.append(f"mamba2_250m_seed{i}")
 
 # Deduplicate while preserving order
 experiments = []
@@ -453,6 +472,142 @@ run_gru_250m() {
     log "  DONE $exp_name"
 }
 
+# ─── Mass Seed Runs ────────────────────────────────────────────────────────────
+
+run_gru_50_seeds() {
+    section "GRU Baseline: 50 seeds @ 50M"
+    for seed in $(seq 1 50); do
+        local sfx=$(seed_suffix "$seed")
+        local sa=$(seed_args "$seed")
+        local exp_name="gru_baseline_50m${sfx}"
+        # shellcheck disable=SC2086
+        run_experiment "$exp_name" \
+            --optimizer adam --learning_rate 1e-4 --exploration_loss_coeff 0.001 \
+            $sa
+    done
+}
+
+run_mamba2_50_seeds() {
+    section "Mamba-2 HPO Best: 50 seeds @ 50M"
+    for seed in $(seq 1 50); do
+        local sfx=$(seed_suffix "$seed")
+        local sa=$(seed_args "$seed")
+        local exp_name="mamba2_hpo_best_50m${sfx}"
+        # shellcheck disable=SC2086
+        run_experiment "$exp_name" \
+            --rnn_type mamba2 \
+            --mamba_d_model 512 --mamba_d_state 128 --mamba_headdim 128 --mamba_expand 1 \
+            --optimizer adamw --learning_rate 4.05e-4 --exploration_loss_coeff 0.00202 \
+            --weight_decay 0.00196 $sa
+    done
+}
+
+run_gru_250m_10_seeds() {
+    section "GRU 250M: 10 seeds"
+    for seed in $(seq 1 10); do
+        local sfx=$(seed_suffix "$seed")
+        local sa=$(seed_args "$seed")
+        local exp_name="gru_250m${sfx}"
+        if [ -f "$TRAIN_DIR/$exp_name/sf_log.txt" ] && grep -q "Total num frames: 249" "$TRAIN_DIR/$exp_name/sf_log.txt" 2>/dev/null; then
+            log "  SKIP $exp_name — already completed"
+            continue
+        fi
+        # shellcheck disable=SC2086
+        run_experiment "$exp_name" \
+            --optimizer adam --learning_rate 1e-4 --exploration_loss_coeff 0.001 \
+            --train_for_env_steps 250000000 $sa
+    done
+}
+
+run_mamba2_250m_10_seeds() {
+    section "Mamba-2 250M: 10 seeds"
+    for seed in $(seq 1 10); do
+        local sfx=$(seed_suffix "$seed")
+        local sa=$(seed_args "$seed")
+        local exp_name="mamba2_250m${sfx}"
+        if [ -f "$TRAIN_DIR/$exp_name/sf_log.txt" ] && grep -q "Total num frames: 249" "$TRAIN_DIR/$exp_name/sf_log.txt" 2>/dev/null; then
+            log "  SKIP $exp_name — already completed"
+            continue
+        fi
+        # shellcheck disable=SC2086
+        run_experiment "$exp_name" \
+            --rnn_type mamba2 \
+            --mamba_d_model 512 --mamba_d_state 128 --mamba_headdim 128 --mamba_expand 1 \
+            --optimizer adamw --learning_rate 4.05e-4 --exploration_loss_coeff 0.00202 \
+            --weight_decay 0.00196 \
+            --train_for_env_steps 250000000 $sa
+    done
+}
+
+run_gru_hpo() {
+    section "GRU HPO (15 trials, ~7h)"
+    log "Running GRU HPO..."
+    uv run python3 -m _vizdoom.gru_hpo
+}
+
+# ─── Slurm Submission ──────────────────────────────────────────────────────────
+
+is_on_cluster() {
+    [[ -n "$SLURM_JOB_ID" ]] || command -v srun &>/dev/null
+}
+
+submit_slurm_job() {
+    local job_name=$1
+    local script=$2
+    local node_constraint=${3:-""}
+    local gres=${4:-"gpu:1"}
+    
+    local sbatch_script=$(mktemp /tmp/sbatch_XXXXXX.sh)
+    cat > "$sbatch_script" <<EOF
+#!/usr/bin/env bash
+#SBATCH --job-name=${job_name}
+#SBATCH --partition=${SLURM_GPU_PARTITION}
+#SBATCH --gres=${gres}
+#SBATCH --cpus-per-task=${SLURM_CPUS_PER_TASK}
+#SBATCH --mem=${SLURM_MEM}
+#SBATCH --time=${SLURM_GPU_TIME}
+#SBATCH --output=${TRAIN_DIR}/slurm_%j.out
+#SBATCH --error=${TRAIN_DIR}/slurm_%j.err
+#SBATCH --chdir=
+EOF
+
+    if [ -n "$node_constraint" ]; then
+        echo "#SBATCH --constraint=${node_constraint}" >> "$sbatch_script"
+    fi
+    
+    cat >> "$sbatch_script" <<EOF
+
+source ~/.bashrc
+uv sync
+bash ${script}
+EOF
+    
+    sbatch "$sbatch_script"
+    rm -f "$sbatch_script"
+    log "Submitted: $job_name"
+}
+
+submit_all_experiments() {
+    section "Submitting Slurm Jobs"
+    
+    # Job 1: GRU 50 seeds @ 50M
+    submit_slurm_job "gru_50seeds_50m" "reproduce.sh --gru-50-seeds"
+    
+    # Job 2: Mamba-2 50 seeds @ 50M
+    submit_slurm_job "mamba2_50seeds_50m" "reproduce.sh --mamba2-50-seeds"
+    
+    # Job 3: GRU HPO
+    submit_slurm_job "gru_hpo" "reproduce.sh --hpo-gru"
+    
+    # Job 4: GRU 250M 10 seeds (needs more time)
+    submit_slurm_job "gru_250m_10seeds" "reproduce.sh --gru-250m-10seeds"
+    
+    # Job 5: Mamba-2 250M 10 seeds (needs more time)
+    submit_slurm_job "mamba2_250m_10seeds" "reproduce.sh --mamba2-250m-10seeds"
+    
+    log "All jobs submitted. Check: squeue -u $(whoami)"
+}
+
 run_hpo() {
     section "Mamba-2 HPO (85 trials, ~12h)"
     log "  Mamba-2 HPO already completed. Best config in use for run_mamba2()."
@@ -594,8 +749,47 @@ main() {
             echo "  --hpo          Show Mamba-2 HPO info (already completed)"
             echo "  --hpo-transformer  Run Transformer HPO (15 trials, ~7h)"
             echo "  --hpo-perceiver    Run Perceiver IO HPO (10 trials, ~8h)"
-            echo "  --ablation     Run ablation experiments (~1h)"
-            echo "  --help, -h     Show this help"
+            echo "  --hpo-gru          Run GRU HPO (15 trials, ~7h)"
+            echo "  --ablation         Run ablation experiments (~1h)"
+            echo "  --gru-50-seeds     Run GRU baseline 50 seeds @ 50M"
+            echo "  --mamba2-50-seeds  Run Mamba-2 50 seeds @ 50M"
+            echo "  --gru-250m-10seeds Run GRU 250M 10 seeds"
+            echo "  --mamba2-250m-10seeds Run Mamba-2 250M 10 seeds"
+            echo "  --slurm-submit     Submit all new experiments via Slurm"
+            echo "  --help, -h         Show this help"
+            exit 0
+            ;;
+    esac
+    
+    # New experiment modes
+    case "$mode" in
+        --hpo-gru)
+            check_env
+            run_gru_hpo
+            exit 0
+            ;;
+        --gru-50-seeds)
+            check_env
+            run_gru_50_seeds
+            exit 0
+            ;;
+        --mamba2-50-seeds)
+            check_env
+            run_mamba2_50_seeds
+            exit 0
+            ;;
+        --gru-250m-10seeds)
+            check_env
+            run_gru_250m_10_seeds
+            exit 0
+            ;;
+        --mamba2-250m-10seeds)
+            check_env
+            run_mamba2_250m_10_seeds
+            exit 0
+            ;;
+        --slurm-submit)
+            submit_all_experiments
             exit 0
             ;;
     esac
