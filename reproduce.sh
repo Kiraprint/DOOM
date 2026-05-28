@@ -65,10 +65,28 @@ assert mem >= 12, f'Need >=12GB VRAM, have {mem:.0f}GB'
 run_experiment() {
     local exp_name=$1; shift
     local exp_dir="$TRAIN_DIR/$exp_name"
+    local target_steps="${TRAIN_STEPS:-50000000}"
     
-    if [ -f "$exp_dir/sf_log.txt" ] && grep -q "Total num frames: 50000000\|Total num frames: 499" "$exp_dir/sf_log.txt" 2>/dev/null; then
-        log "  SKIP $exp_name — already completed"
-        return 0
+    # Detect target from --train_for_env_steps if passed
+    for arg in "$@"; do
+        if [[ "$arg" =~ ^[0-9]+$ ]] && [ "$arg" -gt 1000000 ] 2>/dev/null; then
+            target_steps=$arg
+        fi
+    done
+    # Also check if last positional arg looks like step count
+    local last_arg="${!#}"
+    if [[ "$last_arg" =~ ^[0-9]+$ ]] && [ "$last_arg" -gt 1000000 ] 2>/dev/null; then
+        target_steps=$last_arg
+    fi
+    
+    # Check for completion: look for target or near-target frame count
+    if [ -f "$exp_dir/sf_log.txt" ]; then
+        local max_frames=$(grep -oP 'Total num frames: \K\d+' "$exp_dir/sf_log.txt" | tail -1)
+        local min_complete=$(( target_steps * 90 / 100 ))
+        if [ -n "$max_frames" ] && [ "$max_frames" -ge "$min_complete" ] 2>/dev/null; then
+            log "  SKIP $exp_name — already at ${max_frames} frames (target ${target_steps})"
+            return 0
+        fi
     fi
     
     log "  RUN $exp_name"
@@ -127,18 +145,27 @@ experiments_raw += ["transformer_50m_seed1", "transformer_50m"]
 # Perceiver IO (1 seed)
 experiments_raw += ["perceiver_50m_seed1", "perceiver_50m"]
 # GRU 250M
-    # GRU 250M
-    experiments_raw += ["doom_battle_appo_gru_250m"]
+experiments_raw += ["doom_battle_appo_gru_250m"]
     
-    # 50-seed runs (GRU baseline and Mamba-2)
-    for i in range(1, 51):
-        experiments_raw.append(f"gru_baseline_50m_seed{i}")
-        experiments_raw.append(f"mamba2_hpo_best_50m_seed{i}")
-    
-    # 250M 10-seed runs
-    for i in range(1, 11):
-        experiments_raw.append(f"gru_250m_seed{i}")
-        experiments_raw.append(f"mamba2_250m_seed{i}")
+# GRU optimized 50 seeds
+for i in range(1, 51):
+    experiments_raw.append(f"gru_optimized_50m_seed{i}")
+
+# 50-seed runs (GRU baseline and Mamba-2)
+for i in range(1, 51):
+    experiments_raw.append(f"gru_baseline_50m_seed{i}")
+    experiments_raw.append(f"mamba2_hpo_best_50m_seed{i}")
+
+# 250M 10-seed runs
+for i in range(1, 11):
+    experiments_raw.append(f"gru_250m_seed{i}")
+    experiments_raw.append(f"mamba2_250m_seed{i}")
+
+# Window ablation: 3 arch × 3 windows × 3 seeds
+for arch in ['gru_baseline', 'gru_optimized', 'mamba2_hpo_best']:
+    for w in [32, 64, 128]:
+        for s in range(1, 4):
+            experiments_raw.append(f"{arch}_50m_w{w}_seed{s}")
 
 # Deduplicate while preserving order
 experiments = []
@@ -382,6 +409,166 @@ ax5.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig(os.path.join(train_dir, 'gru_3seed_comparison.png'), dpi=150, bbox_inches='tight')
 print("  Saved gru_3seed_comparison.png")
+
+# ─── Figure 6: Boxplot of final rewards across seeds ───
+def get_final_rewards(exp_list, label_list):
+    """Return list of lists: final rewards for each experiment group."""
+    groups = []
+    for exps, _ in zip(exp_list, label_list):
+        grp = []
+        for e in exps:
+            r, _ = load(e)
+            if r:
+                grp.append(max(r[-20:]))
+        if grp:
+            groups.append(grp)
+    return groups
+
+box_groups = [
+    [f'gru_baseline_50m_seed{i}' for i in range(1, 51)],
+    [f'gru_optimized_50m_seed{i}' for i in range(1, 51)],
+    [f'mamba2_hpo_best_50m_seed{i}' for i in range(1, 51)],
+]
+box_labels = ['GRU baseline', 'GRU + HPs', 'Mamba-2 HPO']
+box_data = get_final_rewards(box_groups, box_labels)
+
+if any(box_data):
+    fig6, ax6 = plt.subplots(figsize=(10, 7))
+    bp = ax6.boxplot(box_data, labels=box_labels, patch_artist=True, widths=0.5)
+    colors = ['#1f77b4', '#2ca02c', '#ff7f0e']
+    for patch, color in zip(bp['boxes'], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.6)
+    # Overlay individual points
+    for i, data in enumerate(box_data):
+        jitter = np.random.normal(0, 0.04, size=len(data))
+        ax6.scatter(np.ones(len(data)) * (i + 1) + jitter, data, alpha=0.3, s=15, color='black')
+    ax6.set_ylabel(u'\u0424\u0438\u043d\u0430\u043b\u044c\u043d\u0430\u044f \u043d\u0430\u0433\u0440\u0430\u0434\u0430 (mean last 20)', fontsize=12)
+    ax6.set_title(u'Doom Benchmark: \u0440\u0430\u0437\u0431\u0440\u043e\u0441 \u043f\u043e \u0441\u0438\u0434\u0430\u043c (50M \u0448\u0430\u0433\u043e\u0432)', fontsize=14)
+    ax6.grid(True, alpha=0.3, axis='y')
+    plt.tight_layout()
+    plt.savefig(os.path.join(train_dir, 'boxplot_across_seeds.png'), dpi=150, bbox_inches='tight')
+    print("  Saved boxplot_across_seeds.png")
+    
+    # T-test
+    from scipy import stats as st
+    print()
+    print("  T-test results (final reward, last20 mean):")
+    for i in range(len(box_data)):
+        for j in range(i+1, len(box_data)):
+            if len(box_data[i]) >= 2 and len(box_data[j]) >= 2:
+                t, p = st.ttest_ind(box_data[i], box_data[j])
+                print(f"    {box_labels[i]} vs {box_labels[j]}: t={t:.3f}, p={p:.4f} {'(significant)' if p < 0.05 else '(not significant)'}")
+
+# ─── Figure 7: Window ablation (reward vs window size) ───
+win_sizes = [32, 64, 128]
+win_archs = [
+    ('GRU baseline', 'gru_baseline_50m', '#1f77b4', 'o-'),
+    ('GRU + HPs',    'gru_optimized_50m', '#2ca02c', 's-'),
+    ('Mamba-2 HPO',  'mamba2_hpo_best_50m', '#ff7f0e', 'D-'),
+]
+fig7, ax7 = plt.subplots(figsize=(10, 7))
+for label, base, color, style in win_archs:
+    means, stds = [], []
+    for w in win_sizes:
+        vals = []
+        for s in range(1, 4):
+            r, _ = load(f"{base}_w{w}_seed{s}")
+            if r:
+                vals.append(max(r[-20:]))
+        if vals:
+            means.append(np.mean(vals))
+            stds.append(np.std(vals))
+    if means:
+        ax7.errorbar(win_sizes, means, yerr=stds, label=label, color=color, fmt=style,
+                     linewidth=2, capsize=5, capthick=2)
+ax7.set_xlabel(u'\u0420\u0430\u0437\u043c\u0435\u0440 \u043e\u043a\u043d\u0430 (\u043a\u0430\u0434\u0440\u043e\u0432)', fontsize=12)
+ax7.set_ylabel(u'\u0424\u0438\u043d\u0430\u043b\u044c\u043d\u0430\u044f \u043d\u0430\u0433\u0440\u0430\u0434\u0430 (mean last 20)', fontsize=12)
+ax7.set_title(u'Doom Benchmark: \u0437\u0430\u0432\u0438\u0441\u0438\u043c\u043e\u0441\u0442\u044c \u043d\u0430\u0433\u0440\u0430\u0434\u044b \u043e\u0442 \u043e\u043a\u043d\u0430', fontsize=14)
+ax7.set_xticks(win_sizes)
+ax7.legend(fontsize=10)
+ax7.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.savefig(os.path.join(train_dir, 'window_ablation.png'), dpi=150, bbox_inches='tight')
+print("  Saved window_ablation.png")
+
+# ─── Figure 8: GRU 250M vs Mamba-2 250M (multi-seed) ───
+fig8, ax8 = plt.subplots(figsize=(14, 7))
+# GRU 250M (existing single seed)
+r, f = load('doom_battle_appo_gru_250m')
+if r:
+    rs = smooth(r, 25)
+    fs = f[len(f)-len(rs):]
+    ax8.plot(fs, rs, label='GRU 250M (seed1)', color='#1f77b4', linewidth=1.5)
+    annotate_best(ax8, r, f, '#1f77b4')
+# Mamba-2 250M seeds
+m2_250_colors = ['#ff7f0e', '#ffbb78', '#d95f02', '#ffeda0']
+for s in range(1, 5):
+    r, f = load(f'mamba2_250m_seed{s}')
+    if r:
+        rs = smooth(r, 25)
+        fs = f[len(f)-len(rs):]
+        ax8.plot(fs, rs, label=f'Mamba-2 250M (seed{s})', color=m2_250_colors[s-1], linewidth=1.2)
+        annotate_best(ax8, r, f, m2_250_colors[s-1])
+# GRU 250M additional seeds
+gru_250_colors = ['#1f77b4', '#aec7e8', '#9ec9e0', '#6baed6']
+for s in range(1, 5):
+    r, f = load(f'gru_250m_seed{s}')
+    if r:
+        rs = smooth(r, 25)
+        fs = f[len(f)-len(rs):]
+        ax8.plot(fs, rs, label=f'GRU 250M (seed{s})', color=gru_250_colors[s-1], linewidth=1.2, linestyle='--')
+        annotate_best(ax8, r, f, gru_250_colors[s-1])
+ncol = (sum(1 for s in range(1,5) if load(f'mamba2_250m_seed{s}')[0]) + 
+        sum(1 for s in range(1,5) if load(f'gru_250m_seed{s}')[0]) + 1)
+ax8.set_xlabel(u'\u0428\u0430\u0433\u0438 \u0441\u0440\u0435\u0434\u044b', fontsize=12)
+ax8.set_ylabel(u'\u0421\u0440\u0435\u0434\u043d\u044f\u044f \u043d\u0430\u0433\u0440\u0430\u0434\u0430 \u0437\u0430 \u044d\u043f\u0438\u0437\u043e\u0434', fontsize=12)
+ax8.set_title(u'GRU vs Mamba-2: 250M \u0448\u0430\u0433\u043e\u0432', fontsize=14)
+# Dynamic x-axis based on max frames
+max_frames = 0
+for s in range(1, 5):
+    _, f = load(f'mamba2_250m_seed{s}')
+    if f and f[-1] > max_frames: max_frames = f[-1]
+    _, f = load(f'gru_250m_seed{s}')
+    if f and f[-1] > max_frames: max_frames = f[-1]
+if max_frames > 0:
+    step = max_frames // 5
+    step = max(step, 50_000_000)
+    ax8.set_xticks(range(0, max_frames + step, step))
+    ax8.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x/1e6)}M'))
+ax8.legend(fontsize=8, loc='lower right', ncol=2)
+ax8.grid(True, alpha=0.3)
+ax8.set_xlim(0, max_frames if max_frames > 0 else 250_000_000)
+plt.tight_layout()
+plt.savefig(os.path.join(train_dir, 'gru_vs_mamba2_250m.png'), dpi=150, bbox_inches='tight')
+print("  Saved gru_vs_mamba2_250m.png")
+
+# ─── Summary table ───
+print()
+print("=" * 80)
+print("  SUMMARY TABLE: Doom Benchmark — Architecture Comparison")
+print("=" * 80)
+summary_groups = [
+    ("GRU baseline 50M",    [f"gru_baseline_50m_seed{i}" for i in range(1, 51)]),
+    ("GRU + HPs 50M",       [f"gru_optimized_50m_seed{i}" for i in range(1, 51)]),
+    ("Mamba-2 HPO 50M",     [f"mamba2_hpo_best_50m_seed{i}" for i in range(1, 51)]),
+    ("GRU 250M",            [f"gru_250m_seed{i}" for i in range(1, 11)] + ["doom_battle_appo_gru_250m"]),
+    ("Mamba-2 250M",        [f"mamba2_250m_seed{i}" for i in range(1, 11)]),
+]
+print(f"{'Group':30s} {'n_seeds':>8s} {'Best(mean)':>12s} {'Best(std)':>10s} {'Final(mean)':>12s} {'Final(std)':>10s}")
+print("-" * 82)
+for label, exps in summary_groups:
+    finals, bests = [], []
+    for e in exps:
+        r, _ = load(e)
+        if r:
+            finals.append(max(r[-20:]))
+            bests.append(max(r))
+    if finals:
+        n = len(finals)
+        print(f"{label:30s} {n:8d} {np.mean(bests):12.2f} {np.std(bests):10.2f} {np.mean(finals):12.2f} {np.std(finals):10.2f}")
+print("=" * 82)
+print()
 PYEOF
 }
 
@@ -459,17 +646,9 @@ run_perceiver() {
 
 run_gru_250m() {
     section "GRU 250M (long run)"
-    local exp_name="doom_battle_appo_gru_250m"
-    if [ -f "$TRAIN_DIR/$exp_name/sf_log.txt" ] && grep -q "Total num frames: 249" "$TRAIN_DIR/$exp_name/sf_log.txt" 2>/dev/null; then
-        log "  SKIP $exp_name — already completed"
-        return 0
-    fi
-    log "  RUN $exp_name (250M steps ≈ 80 min)"
-    uv run python3 -m models.train \
+    run_experiment "doom_battle_appo_gru_250m" \
         --optimizer adam --learning_rate 1e-4 --exploration_loss_coeff 0.001 \
-        --train_for_env_steps 250000000 \
-        --experiment "$exp_name" 2>&1 | tee -a "$LOG_FILE"
-    log "  DONE $exp_name"
+        --train_for_env_steps 250000000
 }
 
 # ─── Mass Seed Runs ────────────────────────────────────────────────────────────
@@ -516,13 +695,8 @@ run_gru_250m_seed() {
     local seed=$1
     local sfx=$(seed_suffix "$seed")
     local sa=$(seed_args "$seed")
-    local exp_name="gru_250m${sfx}"
-    if [ -f "$TRAIN_DIR/$exp_name/sf_log.txt" ] && grep -q "Total num frames: 249" "$TRAIN_DIR/$exp_name/sf_log.txt" 2>/dev/null; then
-        log "  SKIP $exp_name — already completed"
-        return 0
-    fi
     # shellcheck disable=SC2086
-    run_experiment "$exp_name" \
+    run_experiment "gru_250m${sfx}" \
         --optimizer adam --learning_rate 1e-4 --exploration_loss_coeff 0.001 \
         --train_for_env_steps 250000000 $sa
 }
@@ -538,13 +712,8 @@ run_mamba2_250m_seed() {
     local seed=$1
     local sfx=$(seed_suffix "$seed")
     local sa=$(seed_args "$seed")
-    local exp_name="mamba2_250m${sfx}"
-    if [ -f "$TRAIN_DIR/$exp_name/sf_log.txt" ] && grep -q "Total num frames: 249" "$TRAIN_DIR/$exp_name/sf_log.txt" 2>/dev/null; then
-        log "  SKIP $exp_name — already completed"
-        return 0
-    fi
     # shellcheck disable=SC2086
-    run_experiment "$exp_name" \
+    run_experiment "mamba2_250m${sfx}" \
         --rnn_type mamba2 \
         --mamba_d_model 512 --mamba_d_state 128 --mamba_headdim 128 --mamba_expand 1 \
         --optimizer adamw --learning_rate 4.05e-4 --exploration_loss_coeff 0.00202 \
@@ -556,6 +725,74 @@ run_mamba2_250m_10_seeds() {
     section "Mamba-2 250M: 10 seeds"
     for seed in $(seq 1 10); do
         run_mamba2_250m_seed "$seed"
+    done
+}
+
+# ─── Window Ablation (3 arch × 3 windows × 3 seeds = 27 exp) ──────────────
+
+run_window_experiment() {
+    local rnn_type=$1        # gru / gru_optimized / mamba2
+    local window=$2          # 32 / 64 / 128
+    local seed=$3; shift 3
+    local sfx=$(seed_suffix "$seed")
+    local sa=$(seed_args "$seed")
+    
+    # Map arch name to config
+    local exp_name exp_extra
+    case "$rnn_type" in
+        gru)
+            exp_name="gru_baseline_50m_w${window}${sfx}"
+            exp_extra="--optimizer adam --learning_rate 1e-4 --exploration_loss_coeff 0.001"
+            ;;
+        gru_optimized)
+            exp_name="gru_optimized_50m_w${window}${sfx}"
+            exp_extra="--optimizer adamw --learning_rate 4.05e-4 --exploration_loss_coeff 0.00202 --weight_decay 0.00196"
+            ;;
+        mamba2)
+            exp_name="mamba2_hpo_best_50m_w${window}${sfx}"
+            exp_extra="--rnn_type mamba2 --mamba_d_model 512 --mamba_d_state 128 --mamba_headdim 128 --mamba_expand 1 --optimizer adamw --learning_rate 4.05e-4 --exploration_loss_coeff 0.00202 --weight_decay 0.00196"
+            ;;
+    esac
+    # shellcheck disable=SC2086
+    run_experiment "$exp_name" \
+        --rollout "$window" --recurrence "$window" \
+        $exp_extra $sa "$@"
+}
+
+run_window_ablation() {
+    section "Window ablation: GRU base / GRU HPO / Mamba-2 @ 32/64/128, 3 seeds each"
+    # Interleave by architecture (faster context switching)
+    local windows="32 64 128"
+    local seeds="1 2 3"
+    
+    for arch in gru gru_optimized mamba2; do
+        section "  Window ablation: $arch"
+        for w in $windows; do
+            section "    Window=$w"
+            for s in $seeds; do
+                run_window_experiment "$arch" "$w" "$s"
+            done
+        done
+    done
+}
+
+# ─── Multi-seed batch: GRU optimized (20 seeds) ───────────────────────────
+
+run_gru_optimized_50m_seed() {
+    local seed=$1
+    local sfx=$(seed_suffix "$seed")
+    local sa=$(seed_args "$seed")
+    local exp_name="gru_optimized_50m${sfx}"
+    # shellcheck disable=SC2086
+    run_experiment "$exp_name" \
+        --optimizer adamw --learning_rate 4.05e-4 --exploration_loss_coeff 0.00202 \
+        --weight_decay 0.00196 $sa
+}
+
+run_gru_optimized_50_seeds() {
+    section "GRU Optimized: 50 seeds @ 50M"
+    for seed in $(seq 1 50); do
+        run_gru_optimized_50m_seed "$seed"
     done
 }
 
@@ -771,12 +1008,14 @@ main() {
             echo "  --hpo-perceiver    Run Perceiver IO HPO (10 trials, ~8h)"
             echo "  --hpo-gru          Run GRU HPO (15 trials, ~7h)"
             echo "  --ablation         Run ablation experiments (~1h)"
-            echo "  --gru-50-seeds     Run GRU baseline 50 seeds @ 50M"
-            echo "  --mamba2-50-seeds  Run Mamba-2 50 seeds @ 50M"
-            echo "  --gru-250m-10seeds Run GRU 250M 10 seeds"
+            echo "  --gru-50-seeds        Run GRU baseline 50 seeds @ 50M"
+            echo "  --gru-optimized-50-seeds Run GRU+HPO 50 seeds @ 50M"
+            echo "  --mamba2-50-seeds     Run Mamba-2 50 seeds @ 50M"
+            echo "  --gru-250m-10seeds    Run GRU 250M 10 seeds"
             echo "  --mamba2-250m-10seeds Run Mamba-2 250M 10 seeds"
-            echo "  --slurm-submit     Submit all new experiments via Slurm"
-            echo "  --help, -h         Show this help"
+            echo "  --window-ablation     Run window ablation (27 exp @ 50M, ~32h)"
+            echo "  --slurm-submit        Submit all new experiments via Slurm"
+            echo "  --help, -h            Show this help"
             exit 0
             ;;
     esac
@@ -793,9 +1032,21 @@ main() {
             run_gru_50_seeds
             exit 0
             ;;
+        --gru-optimized-50-seeds)
+            check_env
+            run_gru_optimized_50_seeds
+            exit 0
+            ;;
         --mamba2-50-seeds)
             check_env
             run_mamba2_50_seeds
+            exit 0
+            ;;
+        --window-ablation)
+            check_env
+            run_window_ablation
+            collect_results
+            generate_plots
             exit 0
             ;;
         --gru-250m-10seeds)
@@ -824,6 +1075,12 @@ main() {
             run_mamba2_50m_seed "$seed"
             exit 0
             ;;
+        --gru-optimized-50m-seed[0-9]*)
+            seed=${mode#--gru-optimized-50m-seed}
+            check_env
+            run_gru_optimized_50m_seed "$seed"
+            exit 0
+            ;;
         --gru-250m-seed[0-9]*)
             seed=${mode#--gru-250m-seed}
             check_env
@@ -834,6 +1091,15 @@ main() {
             seed=${mode#--mamba2-250m-seed}
             check_env
             run_mamba2_250m_seed "$seed"
+            exit 0
+            ;;
+        --window-[0-9]*)
+            rest=${mode#--window-}
+            arch=${rest%-seed*}
+            w=${arch##*_}
+            seed=${rest##*-seed}
+            check_env
+            run_window_experiment "$arch" "$w" "$seed"
             exit 0
             ;;
     esac
