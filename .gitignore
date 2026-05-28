@@ -27,3 +27,4 @@ session-*.md
 *.png
 *.jpg
 *.jpeg
+.worktrees/
