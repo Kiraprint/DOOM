@@ -1,0 +1,23 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#1e3a5f', 'primaryTextColor': '#fff', 'primaryBorderColor': '#1e3a5f', 'lineColor': '#4B5563', 'secondaryColor': '#dbeafe', 'tertiaryColor': '#fce7f3', 'clusterBkg': '#f8fafc', 'fontSize': 15, 'clusterBorder': '#cbd5e1', 'nodeBorder': '#3b82f6', 'nodeTextColor': '#1e40af', 'titleColor': '#1e3a5f'}}}%%flowchart TD
+    X["x_t"]
+    CONV["Conv1d"]
+    SILU["SiLU"]
+    SSM["Селективное SSM<br/>h_t = Ā · h_{t-1} + B̄ · x_t<br/>y_t = C · h_t + D · x_t<br/>Ā=exp(Δ·A), B̄=(Δ·A)⁻¹(exp(Δ·A)-I)·Δ·B"]
+    SEL["Селективность<br/>B = proj_B(x_t)<br/>C = proj_C(x_t)<br/>Δ = softplus(proj_Δ(x_t))"]
+    NORM["RMSNorm"]
+    Y["y_t"]
+    DISC["Дискретизация (Zero-Order Hold):<br/>• Непрерывная: h'(t) = A·h(t) + B·x(t)<br/>• Дискретная: h_t = Ā·h_{t-1} + B̄·x_t<br/>• Ā = exp(Δ·A), B̄ = (Δ·A)⁻¹(exp(Δ·A)-I)·Δ·B<br/>• В Mamba-2 Δ = softplus(Linear(x_t)) — входозависимая"]
+
+    X --> CONV --> SILU --> SSM
+    SILU -.-> SEL
+    SSM --> NORM --> Y
+    SEL --> SSM
+
+    style X fill:#dbeafe,stroke:#3b82f6,stroke-width:1.5
+    style CONV fill:#e0e7ff,stroke:#6366f1,stroke-width:1.5
+    style SILU fill:#fce7f3,stroke:#ec4899,stroke-width:1.5
+    style SSM fill:#f0fdf4,stroke:#10b981,stroke-width:1.5
+    style SEL fill:#fef3c7,stroke:#f59e0b,stroke-width:1.5
+    style NORM fill:#e0e7ff,stroke:#6366f1,stroke-width:1.5
+    style Y fill:#dbeafe,stroke:#3b82f6,stroke-width:1.5
+    style DISC fill:#f8fafc,stroke:#e2e8f0,stroke-width:0.5

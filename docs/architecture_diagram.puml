@@ -1,0 +1,72 @@
+@startuml
+!$PERSON_BG_COLOR = "#dbeafe"
+!$PERSON_BORDER_COLOR = "#3b82f6"
+!$SYSTEM_BG_COLOR = "#fce7f3"
+!$SYSTEM_BORDER_COLOR = "#ec4899"
+!$CONTAINER_BG_COLOR = "#f0fdf4"
+!$CONTAINER_BORDER_COLOR = "#10b981"
+!$BOUNDARY_COLOR = "#94a3b8"
+
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+skinparam defaultFontName "sans-serif"
+skinparam defaultFontColor #1e3a5f
+skinparam defaultFontSize 11
+skinparam backgroundColor #fafbfc
+skinparam roundCorner 6
+
+skinparam rectangle<<person>> {
+  BackgroundColor #dbeafe
+  FontColor #1e40af
+  BorderColor #3b82f6
+}
+skinparam rectangle<<external_system>> {
+  BackgroundColor #fce7f3
+  FontColor #be185d
+  BorderColor #ec4899
+}
+skinparam rectangle<<system>> {
+  BackgroundColor #fce7f3
+  FontColor #be185d
+  BorderColor #ec4899
+}
+skinparam rectangle<<container>> {
+  BackgroundColor #f0fdf4
+  FontColor #047857
+  BorderColor #10b981
+}
+skinparam rectangle<<container_boundary>> {
+  BackgroundColor #f8fafc
+  FontColor #1e3a5f
+  BorderColor #94a3b8
+}
+
+LAYOUT_WITH_LEGEND()
+
+title Архитектура PolicyModel (C4 Container)
+
+Person(agent, "Агент", "Игровой агент DOOM")
+
+System(vizdoom, "ViZDoom", "Среда: 64 экземпляра DOOM")
+System(sf, "Sample Factory", "Фреймворк: APPO, rnn_states")
+
+Container_Boundary(policy, "PolicyModel") {
+    Container(cnn, "CNNEncoder", "CNN + ReLU", "Признаки 4x640x480 -> 512")
+    
+    Container_Boundary(core, "ModelCore (модуль памяти)") {
+        Container(gru, "GRU", "GRUCell rec=32", "Baseline RNN")
+        Container(mamba, "Mamba-2", "SSM d_state=128", "Селективный SSM")
+        Container(tf, "Transformer", "Attn sliding 64", "Каузальное внимание")
+        Container(perc, "Perceiver IO", "Cross-attn 32 lat", "Латентный массив")
+    }
+    
+    Container(head, "PolicyHead", "Linear+softmax", "pi(a|s) + V(s)")
+}
+
+Rel(agent, vizdoom, "Действие")
+Rel(vizdoom, cnn, "obs 4x640x480")
+Rel(cnn, core, "features BxTx512")
+Rel(core, head, "hidden state")
+Rel(core, sf, "new_rnn_states")
+Rel(sf, core, "rnn_states buffer")
+@enduml
