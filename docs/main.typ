@@ -244,15 +244,18 @@ GRU @cho2014gru представляет собой облегчённую ве�
 
 Формально GRU описывается уравнениями:
 
-$ r_t = sigma(W_r bold(dot) [bold(h)_{t-1}, x_t]) $
+#[
+  #set par(first-line-indent: 0pt)
+  $ r_t = sigma(W_r bold(dot) [bold(h)_{t-1}, x_t]), $
 
-$ z_t = sigma(W_z bold(dot) [bold(h)_{t-1}, x_t]) $
+  $ z_t = sigma(W_z bold(dot) [bold(h)_{t-1}, x_t]), $
 
-$ tilde(h)_t = tanh(W bold(dot) [r_t * bold(h)_{t-1}, x_t]) $
+  $ tilde(h)_t = tanh(W bold(dot) [r_t * bold(h)_{t-1}, x_t]), $
 
-$ bold(h)_t = (1 - z_t) * bold(h)_{t-1} + z_t * tilde(h)_t $
+  $ bold(h)_t = (1 - z_t) * bold(h)_{t-1} + z_t * tilde(h)_t, $
 
-где $bold(h)_t$ — скрытое состояние на шаге $t$, $x_t$ — вход, $r_t$ определяет, какую часть предыдущего состояния забыть, а $z_t$ регулирует долю нового кандидата $tilde(h)_t$. Схема GRU-ячейки приведена на рис. @fig-gru.
+  где $bold(h)_t$ — скрытое состояние на шаге $t$, $x_t$ — вход, $r_t$ определяет, какую часть предыдущего состояния забыть, а $z_t$ регулирует долю нового кандидата $tilde(h)_t$. Схема GRU-ячейки приведена на рис. @fig-gru.
+]
 
 #figure(
   image("assets/gru_cell.svg", width: 80%),
@@ -267,9 +270,12 @@ $ bold(h)_t = (1 - z_t) * bold(h)_{t-1} + z_t * tilde(h)_t $
 
 Механизм scaled dot-product attention определяется формулой:
 
-$ "Attention"(Q, K, V) = "softmax"(Q K^top / sqrt(d_k)) V $
+#[
+  #set par(first-line-indent: 0pt)
+  $ "Attention"(Q, K, V) = "softmax"(Q K^top / sqrt(d_k)) V, $
 
-где $Q$, $K$, $V$ получаются линейным проецированием входной последовательности: $Q = X W_Q$, $K = X W_K$, $V = X W_V$. Деление на $sqrt(d_k)$ предотвращает рост дисперсии скалярных произведений при большой размерности ключей. Механизм scaled dot-product attention показан на рис. @fig-attn.
+  где $Q$, $K$, $V$ получаются линейным проецированием входной последовательности: $Q = X W_Q$, $K = X W_K$, $V = X W_V$. Деление на $sqrt(d_k)$ предотвращает рост дисперсии скалярных произведений при большой размерности ключей. Механизм scaled dot-product attention показан на рис. @fig-attn.
+]
 
 #figure(
   image("assets/self_attention.svg", width: 80%),
@@ -278,9 +284,9 @@ $ "Attention"(Q, K, V) = "softmax"(Q K^top / sqrt(d_k)) V $
 
 Multi-head attention расширяет механизм, выполняя несколько операций внимания параллельно:
 
-$ "MultiHead"(Q,K,V) = "Concat"("head"_1, ..., "head"_h) W_O $
+$ "MultiHead"(Q,K,V) = "Concat"("head"_1, ..., "head"_h) W_O, $
 
-$ "head"_i = "Attention"(Q W_i^Q, K W_i^K, V W_i^V) $
+$ "head"_i = "Attention"(Q W_i^Q, K W_i^K, V W_i^V). $
 
 Каждая голова $h_i$ работает в подпространстве пониженной размерности, что позволяет модели одновременно учитывать различные типы зависимостей между элементами последовательности (рис. @fig-multihead).
 
@@ -299,25 +305,31 @@ Mamba-2 @dao2024transformers основана на State Space Duality — по 
 
 SSM описывает систему парой дифференциальных уравнений:
 
-$ bold(h)'(t) = A bold(h)(t) + B x(t) $
+#[
+  #set par(first-line-indent: 0pt)
+  $ bold(h)'(t) = A bold(h)(t) + B x(t), $
 
-$ y(t) = C bold(h)(t) + D x(t) $
+  $ y(t) = C bold(h)(t) + D x(t), $
 
-где $bold(h)(t) in RR^n$ — вектор состояния размерности $n$, $x(t)$ — входной сигнал, $y(t)$ — выход. Матрица $A$ определяет динамику системы (как состояние эволюционирует само по себе), $B$ — как вход влияет на состояние, $C$ — как состояние проецируется в выход, $D$ — прямое пропускание входа на выход (skip-connection).
+  где $bold(h)(t) in RR^n$ — вектор состояния размерности $n$, $x(t)$ — входной сигнал, $y(t)$ — выход. Матрица $A$ определяет динамику системы (как состояние эволюционирует само по себе), $B$ — как вход влияет на состояние, $C$ — как состояние проецируется в выход, $D$ — прямое пропускание входа на выход (skip-connection).
+]
 
 Для применения на дискретных последовательностях (шаги времени $t = 1, 2, ...$) непрерывная система дискретизируется методом Zero-Order Hold (ZOH):
 
-$ bold(h)_t = overline(A) bold(h)_{t-1} + overline(B) x_t $
+$ bold(h)_t = overline(A) bold(h)_{t-1} + overline(B) x_t, $
 
-$ overline(A) = exp(Delta A), quad overline(B) = (Delta A)^{-1} (exp(Delta A) - I) bold(dot) Delta B $
+$ overline(A) = exp(Delta A), quad overline(B) = (Delta A)^{-1} (exp(Delta A) - I) bold(dot) Delta B. $
 
 Параметр $Delta$ определяет шаг дискретизации — по сути, скорость обновления состояния.
 
 *Селективность.* Ключевое отличие Mamba-2 от предшествующих SSM (S4, S5) — матрицы $B$, $C$ и шаг $Delta$ вычисляются от входного сигнала $x_t$, а не фиксируются после обучения:
 
-$ B = f_B(x_t), quad C = f_C(x_t), quad Delta = "softplus"(f_Delta(x_t)) $
+#[
+  #set par(first-line-indent: 0pt)
+  $ B = f_B(x_t), quad C = f_C(x_t), quad Delta = "softplus"(f_Delta(x_t)), $
 
-где $f_B$, $f_C$, $f_Delta$ — линейные проекции. Это делает SSM input-dependent, то есть модель сама решает, какую информацию запомнить, какую отбросить и с какой скоростью обновлять состояние — аналогично тому, как вентили GRU регулируют поток информации, но с более гибкой параметризацией. Структура SSM-блока Mamba-2 показана на рис. @fig-mamba2.
+  где $f_B$, $f_C$, $f_Delta$ — линейные проекции. Это делает SSM input-dependent, то есть модель сама решает, какую информацию запомнить, какую отбросить и с какой скоростью обновлять состояние — аналогично тому, как вентили GRU регулируют поток информации, но с более гибкой параметризацией. Структура SSM-блока Mamba-2 показана на рис. @fig-mamba2.
+]
 
 #figure(
   image("assets/mamba2_block.svg", width: 95%),
