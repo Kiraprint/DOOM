@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#555"/>
+    </marker>
+    <marker id="arrow-right" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#555"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="900" fill="#fafbfc" rx="8"/>
+
+  <!-- Title -->
+  <text x="600" y="36" text-anchor="middle" font-size="20" font-weight="700" fill="#1a365d">Управление состоянием Mamba-2: буферизация через rnn_states</text>
+
+  <!-- Column headers -->
+  <rect x="40" y="56" width="540" height="28" rx="4" fill="#ebf4ff"/>
+  <text x="310" y="75" text-anchor="middle" font-size="13" fill="#2c5282" font-weight="600">Режим обучения (PackedSequence)</text>
+
+  <rect x="620" y="56" width="540" height="28" rx="4" fill="#fff5f5"/>
+  <text x="890" y="75" text-anchor="middle" font-size="13" fill="#c53030" font-weight="600">Режим инференса (пощаговый)</text>
+
+  <!-- ====== LEFT COLUMN: Training Mode ====== -->
+
+  <!-- Box 1: PackedSequence -->
+  <rect x="60" y="96" width="500" height="52" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="310" y="120" text-anchor="middle" font-size="14" font-weight="700" fill="#1e3a5f">PackedSequence</text>
+  <text x="310" y="138" text-anchor="middle" font-size="12" fill="#475569">полные эпизоды (NxT, 512)</text>
+
+  <!-- Arrow -->
+  <line x1="310" y1="148" x2="310" y2="170" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Box 2: unpack -->
+  <rect x="160" y="170" width="300" height="44" rx="6" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1"/>
+  <text x="310" y="189" text-anchor="middle" font-size="12" fill="#334155">unpack 2D to 3D</text>
+  <text x="310" y="205" text-anchor="middle" font-size="11" fill="#64748b" font-style="italic">(max_len, batch, dim)</text>
+
+  <!-- Arrow -->
+  <line x1="310" y1="214" x2="310" y2="236" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Box 3: Mamba-2 x N слоёв -->
+  <rect x="60" y="236" width="500" height="160" rx="10" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+  <text x="310" y="260" text-anchor="middle" font-size="15" font-weight="700" fill="#166534">Mamba-2 x N слоёв</text>
+  <line x1="100" y1="272" x2="520" y2="272" stroke="#bbf7d0" stroke-width="1"/>
+  <text x="310" y="292" text-anchor="middle" font-size="11" fill="#475569">Layer 1: LayerNorm → Mamba2Block</text>
+  <text x="310" y="310" text-anchor="middle" font-size="11" fill="#475569">Layer 2: LayerNorm → Mamba2Block</text>
+  <text x="310" y="328" text-anchor="middle" font-size="12" fill="#94a3b8">...</text>
+
+  <!-- gradient checkpointing inner box -->
+  <rect x="140" y="340" width="340" height="36" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+  <text x="310" y="363" text-anchor="middle" font-size="12" fill="#92400e">gradient checkpointing (экономия VRAM)</text>
+
+  <!-- Arrow -->
+  <line x1="310" y1="396" x2="310" y2="418" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Box 4: pack -->
+  <rect x="160" y="418" width="300" height="44" rx="6" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1"/>
+  <text x="310" y="437" text-anchor="middle" font-size="12" fill="#334155">pack 3D to 2D</text>
+  <text x="310" y="453" text-anchor="middle" font-size="11" fill="#64748b" font-style="italic">PackedSequence на выход</text>
+
+  <!-- Arrow -->
+  <line x1="310" y1="462" x2="310" y2="484" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Box 5: выход -->
+  <rect x="60" y="484" width="500" height="52" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="310" y="508" text-anchor="middle" font-size="14" fill="#1e3a5f">выход (PackedSequence)</text>
+  <text x="310" y="526" text-anchor="middle" font-size="12" fill="#64748b" font-style="italic">rnn_states не изменяется</text>
+
+  <!-- ====== RIGHT COLUMN: Inference Mode ====== -->
+
+  <!-- Box 1: rnn_states (буфер) -->
+  <rect x="640" y="96" width="500" height="52" rx="8" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+  <text x="890" y="120" text-anchor="middle" font-size="14" font-weight="700" fill="#166534">rnn_states (буфер)</text>
+  <text x="890" y="138" text-anchor="middle" font-size="12" fill="#475569">[conv_state | ssm_state] x N слоёв</text>
+
+  <!-- Arrow -->
+  <line x1="890" y1="148" x2="890" y2="170" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Box 2: Mamba2StateDecoder -->
+  <rect x="680" y="170" width="420" height="52" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="890" y="192" text-anchor="middle" font-size="13" font-weight="600" fill="#92400e">Mamba2StateDecoder</text>
+  <text x="890" y="210" text-anchor="middle" font-size="11" fill="#78350f">разделение на conv_state + ssm_state, reshape</text>
+
+  <!-- Arrow -->
+  <line x1="890" y1="222" x2="890" y2="244" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Box 3: Внутреннее состояние Mamba-2 -->
+  <rect x="640" y="244" width="500" height="100" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="890" y="266" text-anchor="middle" font-size="14" font-weight="700" fill="#1e293b">Внутреннее состояние Mamba-2 (InferenceParams)</text>
+  <line x1="680" y1="278" x2="1120" y2="278" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- conv_state column -->
+  <text x="760" y="298" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">conv_state</text>
+  <text x="760" y="314" text-anchor="middle" font-size="11" fill="#64748b">(batch, d_conv, d_model)</text>
+  <text x="760" y="330" text-anchor="middle" font-size="10" fill="#94a3b8">8×512×4 = 16384</text>
+
+  <!-- ssm_state column -->
+  <text x="1020" y="298" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">ssm_state</text>
+  <text x="1020" y="314" text-anchor="middle" font-size="11" fill="#64748b">(batch, nheads, h, d_state)</text>
+  <text x="1020" y="330" text-anchor="middle" font-size="10" fill="#94a3b8">8×64×128 = 65536</text>
+
+  <!-- Arrow -->
+  <line x1="890" y1="344" x2="890" y2="366" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Box 4: head_output -->
+  <rect x="640" y="366" width="500" height="56" rx="8" fill="#fce7f3" stroke="#ec4899" stroke-width="2"/>
+  <text x="890" y="388" text-anchor="middle" font-size="13" font-weight="700" fill="#9d174d">head_output → Mamba-2 → PolicyHead (один шаг)</text>
+  <text x="890" y="408" text-anchor="middle" font-size="11" fill="#be185d">seqlen_offset=1 (авто регрессия)</text>
+
+  <!-- Arrow -->
+  <line x1="890" y1="422" x2="890" y2="444" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Box 5: Mamba2StateEncoder -->
+  <rect x="680" y="444" width="420" height="52" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="890" y="466" text-anchor="middle" font-size="13" font-weight="600" fill="#92400e">Mamba2StateEncoder</text>
+  <text x="890" y="484" text-anchor="middle" font-size="11" fill="#78350f">flatten conv + ssm, concat в единый тензор</text>
+
+  <!-- Feedback arrow (right side, curving up) -->
+  <path d="M1100 470 L1180 470 L1180 122 L1140 122" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="1190" y="300" text-anchor="middle" font-size="10" fill="#64748b" transform="rotate(-90,1190,300)">encode → запись в буфер</text>
+
+</svg>

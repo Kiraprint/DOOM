@@ -210,7 +210,7 @@ $ bold(h)_t = (1 - z_t) * bold(h)_{t-1} + z_t * tilde(h)_t $
 где $bold(h)_t$ — скрытое состояние на шаге $t$, $x_t$ — вход, $r_t$ определяет, какую часть предыдущего состояния забыть, а $z_t$ регулирует долю нового кандидата $tilde(h)_t$. Схема GRU-ячейки приведена на рис. @fig-gru.
 
 #figure(
-  image("gru_cell.svg", width: 80%),
+  image("assets/gru_cell.svg", width: 80%),
   caption: [Структура GRU-ячейки],
 ) <fig-gru>
 
@@ -227,7 +227,7 @@ $ "Attention"(Q, K, V) = "softmax"(Q K^top / sqrt(d_k)) V $
 где $Q$, $K$, $V$ получаются линейным проецированием входной последовательности: $Q = X W_Q$, $K = X W_K$, $V = X W_V$. Деление на $sqrt(d_k)$ предотвращает рост дисперсии скалярных произведений при большой размерности ключей. Механизм scaled dot-product attention показан на рис. @fig-attn.
 
 #figure(
-  image("self_attention.svg", width: 80%),
+  image("assets/self_attention.svg", width: 80%),
   caption: [Scaled dot-product attention],
 ) <fig-attn>
 
@@ -240,7 +240,7 @@ $ "head"_i = "Attention"(Q W_i^Q, K W_i^K, V W_i^V) $
 Каждая голова $h_i$ работает в подпространстве пониженной размерности, что позволяет модели одновременно учитывать различные типы зависимостей между элементами последовательности (рис. @fig-multihead).
 
 #figure(
-  image("multihead_attention.svg", width: 70%),
+  image("assets/multihead_attention.svg", width: 70%),
   caption: [Multi-head attention],
 ) <fig-multihead>
 
@@ -275,7 +275,7 @@ $ B = f_B(x_t), quad C = f_C(x_t), quad Delta = "softplus"(f_Delta(x_t)) $
 где $f_B$, $f_C$, $f_Delta$ — линейные проекции. Это делает SSM input-dependent, то есть модель сама решает, какую информацию запомнить, какую отбросить и с какой скоростью обновлять состояние — аналогично тому, как вентили GRU регулируют поток информации, но с более гибкой параметризацией. Структура SSM-блока Mamba-2 показана на рис. @fig-mamba2.
 
 #figure(
-  image("mamba2_block.svg", width: 95%),
+  image("assets/mamba2_block.svg", width: 95%),
   caption: [Структура SSM-блока Mamba-2],
 ) <fig-mamba2>
 
@@ -330,7 +330,7 @@ $ Z_{l+1} = "LayerNorm"( "TransformerBlock"(Z_l) ) $
 где $Z in RR^{M times d}$ — латентный массив из $M$ векторов (в данной работе $M = 32$), $X_{in}$ — спроецированный вход. Вычислительная стоимость: $O(M L)$ для кросс-внимания + $O(M^2)$ для самовнимания — линейна по $L$, причём коэффициент $M = 32$ мал. Архитектура Perceiver IO представлена на рис. @fig-perceiver.
 
 #figure(
-  image("perceiver_cross_attn.svg", width: 85%),
+  image("assets/perceiver_cross_attn.svg", width: 85%),
   caption: [Архитектура Perceiver IO],
 ) <fig-perceiver>
 
@@ -388,7 +388,7 @@ Sample Factory @petrenko2020samplefactory — RL-фреймворк, оптим�
 На рис. @fig-arch приведена детальная архитектура PolicyModel: CNNEncoder, сменный модуль памяти (с четырьмя реализациями), и декодер. Пунктирной линией показан поток rnn_states, которым управляет Sample Factory.
 
 #figure(
-  image("architecture_diagram.svg", width: 100%),
+  image("assets/architecture_diagram.svg", width: 100%),
   caption: [Архитектура PolicyModel со сменным модулем памяти],
 ) <fig-arch>
 
@@ -403,7 +403,7 @@ Mamba-2 использует два внутренних состояния: con
 Mamba2StateEncoder (листинг В.1) сериализует conv_state ($d_"conv" times d_"model" = 4 times 512 = 2048$ элементов) и ssm_state ($n_"heads" times h_"headdim" times d_"state" = 8 times 128 times 128 = 131072$ элементов) в плоский тензор суммарной размерности, который совместим с rnn_states. На forward-проходе дешифратор выполняет обратную операцию: разделяет принятый тензор на две части и восстанавливает исходную размерность каждого состояния.
 
 #figure(
-  image("mamba2_state_flow.svg", width: 95%),
+  image("assets/mamba2_state_flow.svg", width: 95%),
   caption: [Кодирование и декодирование состояния Mamba-2],
 ) <fig-mamba-state>
 
@@ -424,7 +424,7 @@ Mamba2StateEncoder (листинг В.1) сериализует conv_state ($d_"
 Техника gradient checkpointing позволяет избежать этого: промежуточные активации не сохраняются, а пересчитываются на обратном проходе из предыдущего слоя. Классический trade-off: вычисления заменяют память.
 
 #figure(
-  image("checkpointing_diagram.svg", width: 85%),
+  image("assets/checkpointing_diagram.svg", width: 85%),
   caption: [Gradient checkpointing: сравнение forward/backward],
 ) <fig-checkpoint>
 
@@ -459,7 +459,7 @@ Mamba2Factory — обёртка, поддерживающая сериализ�
 Особенность реализации в том, что трансформер не имеет рекуррентного скрытого состояния в классическом смысле. Для инференса в on-policy RL используется механизм скользящего окна: последние 64 наблюдения сохраняются в буфере. Когда поступает новый кадр, буфер сдвигается (самый старый кадр удаляется), и трансформер обрабатывает всё окно заново, вычисляя полную матрицу внимания 64 x 64.
 
 #figure(
-  image("sliding_window.svg", width: 90%),
+  image("assets/sliding_window.svg", width: 90%),
   caption: [Скользящее окно TransformerCore на инференсе],
 ) <fig-sliding>
 
@@ -484,7 +484,7 @@ Mamba2Factory — обёртка, поддерживающая сериализ�
 Optuna, TPE-семплер (Tree Parzen Estimator), ASHA-прунинг после 10 эпох. Пространство поиска: d_model 256/512/1024, d_state 64/128, headdim 64/128, lr 1e-5..1e-3, weight_decay 0..0.1.
 
 #figure(
-  image("hpo_pipeline.svg", width: 90%),
+  image("assets/hpo_pipeline.svg", width: 90%),
   caption: [HPO pipeline],
 ) <fig-hpo>
 
@@ -519,12 +519,12 @@ Optuna, TPE-семплер (Tree Parzen Estimator), ASHA-прунинг посл
 <tab-hpo>
 
 #figure(
-  image("mamba2_hpo_top5.png", width: 100%),
+  image("assets/mamba2_hpo_top5.png", width: 100%),
   caption: [Топ-5 завершённых trials HPO для Mamba-2 с конфигурациями],
 ) <fig-hpo-top5>
 
 #figure(
-  image("mamba2_hpo_curves.png", width: 100%),
+  image("assets/mamba2_hpo_curves.png", width: 100%),
   caption: [Кривые обучения топ-5 завершённых trials HPO],
 ) <fig-hpo-curves>
 
@@ -590,26 +590,26 @@ Optuna, TPE-семплер (Tree Parzen Estimator), ASHA-прунинг посл
 GRU с гиперпараметрами от Mamba-2 — 20.15. Mamba-2 — 19.10 (лучший seed). Стандартный GRU — 13.68. Mamba-1 отстала — 11.89 (лучший seed, среднее 9.03). GLA и DeltaNet неконкурентоспособны: 6.57 и 4.17 соответственно. Transformer и Perceiver IO неприменимы: 1.01 и 1.97.
 
 #figure(
-  image("full_architecture_comparison.png", width: 100%),
+  image("assets/full_architecture_comparison.png", width: 100%),
   caption: [Сравнение архитектур по награде за 50M шагов],
 ) <fig-arch-compare>
 
 Причины по архитектурам. Трансформеру не хватает окна контекста: 64 токена для ViZDoom — крайне мало. HPO поднял до 2.03, но порядок не изменился. Perceiver IO теряет информацию в кросс-внимании, а его козырь (переменный вход) в ViZDoom не нужен. Mamba-1 уступает Mamba-2 из-за меньшего d_state (16 против 128) и неселективного SSM. Индивидуальные траектории сидов Mamba-1 показаны на рис. @fig-mamba1-seeds.
 
 #figure(
-  image("mamba1_seeds.png", width: 80%),
+  image("assets/mamba1_seeds.png", width: 80%),
   caption: [Mamba-1: три сида],
 ) <fig-mamba1-seeds>
 
 GLA и DeltaNet демонстрируют слишком высокий разброс между сидами (коэффициент вариации 40–54%), неприемлемый для on-policy RL. Разброс GLA показан на рис. @fig-gla-seeds, DeltaNet — на рис. @fig-delta-seeds.
 
 #figure(
-  image("gla_seeds.png", width: 80%),
+  image("assets/gla_seeds.png", width: 80%),
   caption: [GLA: 10 сидов],
 ) <fig-gla-seeds>
 
 #figure(
-  image("delta_net_seeds.png", width: 80%),
+  image("assets/delta_net_seeds.png", width: 80%),
   caption: [DeltaNet: 10 сидов],
 ) <fig-delta-seeds>
 
@@ -624,12 +624,12 @@ GLA и DeltaNet демонстрируют слишком высокий раз�
 Применение гиперпараметров, найденных HPO для Mamba-2 (AdamW, lr=4.05e-4, weight_decay=0.00196, exploration_loss_coeff=0.002), существенно изменило результаты GRU: seed1 — 17.44, seed2 — 15.39, seed3 — 20.15, средняя — 17.66 ± 2.39. Различие с baseline статистически значимо (t-тест: t=-4.107, p=0.0034). Это на ~29% выше baseline; seed3 (20.15) приближается к результату GRU 250M (22.45) при пятикратной экономии вычислительных ресурсов. Стандартные гиперпараметры Sample Factory для doom_benchmark, как оказалось, далеки от оптимальных — настройка важна не меньше, чем выбор архитектуры. Траектории трёх сидов GRU+HPO показаны на рис. @fig-gru-hpo-seeds.
 
 #figure(
-  image("gru_baseline_seeds.png", width: 80%),
+  image("assets/gru_baseline_seeds.png", width: 80%),
   caption: [GRU baseline: 7 сидов],
 ) <fig-gru-baseline-seeds>
 
 #figure(
-  image("gru_hpo_seeds.png", width: 80%),
+  image("assets/gru_hpo_seeds.png", width: 80%),
   caption: [GRU+HPO: 3 сида],
 ) <fig-gru-hpo-seeds>
 
@@ -638,7 +638,7 @@ GLA и DeltaNet демонстрируют слишком высокий раз�
 Для Mamba-2 с оптимальной конфигурацией HPO (trial #1, AdamW, d_model=512, d_state=64, headdim=64, recurrence=16, награда 17.01) было выполнено 4 запуска. Средняя лучшая награда составила 15.46 ± 1.56, финальная (на последнем чекпоинте) — 14.45 ± 2.20, максимум 19.10 (seed3). Отставание от GRU+HPO составляет ~8% по финальной награде (14.45 против 17.66), при этом различие статистически незначимо (p=0.189). Высокий разброс между сидами (across-seed std 2.20, within-run std 0.61–1.28) частично связан с природой doom_benchmark — награда флуктуирует от эпизода к эпизоду в зависимости от поведения противника. По сходимости Mamba-2 стабильна, хотя чувствительность к гиперпараметрам остаётся высокой: без HPO качество падает на 20–30%. Скорость обучения Mamba-2 составляет ~15 000 FPS, что в 3–4 раза медленнее GRU (~50 000 FPS). Кривые обучения четырёх сидов Mamba-2 HPO приведены на рис. @fig-mamba2-seeds.
 
 #figure(
-  image("mamba2_hpo_seeds.png", width: 80%),
+  image("assets/mamba2_hpo_seeds.png", width: 80%),
   caption: [Mamba-2 HPO: 4 сида],
 ) <fig-mamba2-seeds>
 
@@ -647,7 +647,7 @@ GLA и DeltaNet демонстрируют слишком высокий раз�
 До HPO проведены короткие прогоны (~1M кадров) для проверки градиентного чекпоинтинга и архитектурных параметров (рис. @fig-mamba2-ablation).
 
 #figure(
-  image("mamba2_ablation.png", width: 100%),
+  image("assets/mamba2_ablation.png", width: 100%),
   caption: [Абляционные эксперименты Mamba-2],
 ) <fig-mamba2-ablation>
 
@@ -660,12 +660,12 @@ GLA и DeltaNet демонстрируют слишком высокий раз�
 Для Mamba-2 выполнен запуск четырёх seed на 250M шагов. Результаты: средняя награда 16.91 ± 2.01, лучший seed достиг 21.53 (seed3), один seed показал 20.02 (seed1). Два из четырёх seed, однако, застряли на ~15 — высокая дисперсия сохраняется даже при пятикратном увеличении бюджета. Прирост средней награды относительно 50M составил +17% (с 14.45 до 16.91). На лучших seed Mamba-2 достигает уровня GRU (21.53 против 22.45), но платит за это 3–4× большим временем обучения (~15K FPS против ~56K FPS у GRU). Индивидуальные траектории сидов Mamba-2 250M показаны на рис. @fig-mamba2-250-seeds, а сравнение усреднённых кривых GRU и Mamba-2 — на рис. @fig-mamba2-250.
 
 #figure(
-  image("mamba2_250m_seeds.png", width: 80%),
+  image("assets/mamba2_250m_seeds.png", width: 80%),
   caption: [Mamba-2 250M: 4 сида],
 ) <fig-mamba2-250-seeds>
 
 #figure(
-  image("gru_vs_mamba2_250m.png", width: 90%),
+  image("assets/gru_vs_mamba2_250m.png", width: 90%),
   caption: [GRU и Mamba-2 при 250M шагов],
 ) <fig-mamba2-250>
 
@@ -680,7 +680,7 @@ GLA и DeltaNet демонстрируют слишком высокий раз�
 Основной вывод: размер окна не оказывает значимого влияния на GRU — значения w32 и w128 практически идентичны. Mamba-2 показывает большую вариативность при разных окнах: w32 даёт лучший средний результат (15.67), но и самый высокий разброс. По умолчанию w32 является разумным выбором для всех архитектур. Сравнение окон для всех трёх конфигураций приведено на рис. @fig-gru-window.
 
 #figure(
-  image("window_ablation.png", width: 90%),
+  image("assets/window_ablation.png", width: 90%),
   caption: [Влияние окна контекста],
 ) <fig-gru-window>
 
@@ -708,17 +708,17 @@ GLA и DeltaNet демонстрируют слишком высокий раз�
 === Кривые обучения
 
 #figure(
-  image("ssm_09_all_seeds_scatter.png", width: 80%),
+  image("assets/ssm_09_all_seeds_scatter.png", width: 80%),
   caption: [Scatter-график всех архитектур: каждый seed — точка],
 ) <fig-all-scatter>
 
 #figure(
-  image("architecture_average_curves.png", width: 100%),
+  image("assets/architecture_average_curves.png", width: 100%),
   caption: [Усреднённые кривые обучения],
 ) <fig-avg-curves>
 
 #figure(
-  image("ssm_10_ranking_table.png", width: 80%),
+  image("assets/ssm_10_ranking_table.png", width: 80%),
   caption: [Рейтинг архитектур по средней награде с указанием разброса],
 ) <fig-ranking>
 
