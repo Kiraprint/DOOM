@@ -32,7 +32,7 @@
 ) = {
   let resolved-year = if year == auto { 2026 } else { year }
 
-  set text(font: "Times New Roman", size: 12pt, lang: "ru", hyphenate: false)
+  set text(font: "Times New Roman", size: 14pt, lang: "ru", hyphenate: false)
 
   // === БЛОК 1: Министерство ===
   align(center, text(weight: "bold", "Министерство науки и высшего образования Российской Федерации"))

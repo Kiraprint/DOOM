@@ -30,11 +30,24 @@
 
 // Переопределяем стили ПОСЛЕ gost.with() чтобы шаблон не перезаписал
 
-// Межстрочный интервал 1.5, без отступов между абзацами
+// Шрифт документа — Times New Roman 14pt
+#set text(font: "Times New Roman", size: 14pt)
+
+// Полуторный межстрочный интервал
 #set par(leading: 1em, spacing: 1em)
 
 // Для подписей таблиц и рисунков — одинарный межстрочный
-#show figure.caption: set par(leading: 0.65em)
+#show figure.caption: set par(leading: 0pt)
+
+// Для листингов кода — Courier New 12pt, ч/б, без подсветки
+#show raw: it => {
+  block(
+    fill: none,
+    inset: 6pt,
+    width: 100%,
+    text(font: "Courier New", size: 12pt, fill: black, it.text),
+  )
+}
 
 // Форматирование таблиц по ГОСТ: повтор шапки и подпись
 // "Продолжение таблицы" на разрыве страниц
