@@ -34,7 +34,7 @@
 #set heading(hanging-indent: 0pt)
 
 // Шрифт документа — Times New Roman 14pt
-#set text(font: "Times New Roman", size: 14pt)
+#set text(font: "Times New Roman", size: 14pt, lang: "ru")
 
 // Полуторный межстрочный интервал
 #set par(leading: 1.05em, spacing: 1em)
@@ -76,10 +76,12 @@
   columns: auto,
   headers: (),
   caption: [],
+  font-size: auto,
   ..rows,
 ) = {
   let count = headers.len()
-  let bold-headers = headers.map(h => text(weight: "bold", h))
+  let bold-headers = headers.map(h => table.cell(align: center + horizon, text(weight: "bold", h)))
+  if font-size != auto { set text(size: font-size) }
 
   figure(
     table(
@@ -214,7 +216,7 @@ SAC использует энтропийную регуляризацию. По
 
 Decision Mamba — альтернативный подход, где SSM используется как сам алгоритм RL, а не как модуль памяти. Идея интересная, но на момент начала работы под ViZDoom не была апробирована. Рисковать не стали.
 
-APPO выбран по трём причинам. Первая — асинхронный сбор опыта: workers не ждут learner, GPU загружен постоянно. Вторая — ModelCore: любую архитектуру памяти можно вставить, не трогая цикл обучения. Третья — под doom_benchmark есть baseline от авторов фреймворка @petrenko2020samplefactory, с чем сравнивать результаты.
+APPO выбран по трём причинам. Первая — асинхронный сбор опыта: workers не ждут learner, GPU загружен постоянно. Вторая — ModelCore: любую архитектуру памяти можно вставить, не трогая цикл обучения. Третья — под doom_benchmark есть baseline от авторов фреймворка @petrenko2020samplefactory, с чем сравнивать результаты. Сравнение характеристик алгоритмов приведено в табл. @tab-rl-algo.
 
 #vkr-table(
   columns: 4,
@@ -399,6 +401,7 @@ $ Z_{l+1} = "LayerNorm"( "TransformerBlock"(Z_l) ) $
   columns: (auto, auto, 3.5cm, 3cm, auto),
   headers: ("Архитектура", "Сложность", "Скрытое состояние", "Параметры (d=512)", "Инференс"),
   caption: [Сравнение архитектур памяти],
+  font-size: 12pt,
   [GRU],    [$O(L)$],     [$d$],        [$3 d^2 approx 0.8M$], [Рекуррентный],
   [Mamba-2], [$O(L)$],   [$n_"heads" h d_"state" + d_"conv" d$], [$approx 2 d^2$], [Рекуррентный],
   [Transformer], [$O(L^2)$], [$L times d$], [$4 d^2 approx 1.0M$ (4 слоя)], [Пересчёт окна],
@@ -436,11 +439,11 @@ Sample Factory @petrenko2020samplefactory — RL-фреймворк, оптим�
 
 Уровень модели политики (PolicyModel). Внутри модели данные проходят три этапа:
 
-1. CNNEncoder — свёрточный энкодер ViZDoom обрабатывает стек из 4 последних кадров (4 x 640 x 480) через последовательность свёрточных слоёв с ReLU и flatten, выдавая признаковое представление размерности 512. На выходе энкодера формируется head_output — последовательность признаков длины $T$ (batch размер), где $T$ определяется рекурренцией (в данной работе 32) и типом обучения.
+1) CNNEncoder — свёрточный энкодер ViZDoom обрабатывает стек из 4 последних кадров (4 x 640 x 480) через последовательность свёрточных слоёв с ReLU и flatten, выдавая признаковое представление размерности 512. На выходе энкодера формируется head_output — последовательность признаков длины $T$ (batch размер), где $T$ определяется рекурренцией (в данной работе 32) и типом обучения.
 
-2. ModelCore — модуль памяти, заменяемый в зависимости от архитектуры. Получает head_output (PackedSequence на обучении, тензор на инференсе) и rnn_states, возвращает обновлённое скрытое состояние и выход. Может быть GRU, Mamba-2, Transformer или Perceiver IO.
+2) ModelCore — модуль памяти, заменяемый в зависимости от архитектуры. Получает head_output (PackedSequence на обучении, тензор на инференсе) и rnn_states, возвращает обновлённое скрытое состояние и выход. Может быть GRU, Mamba-2, Transformer или Perceiver IO.
 
-3. Decoder — PolicyHead (линейный слой, выдающий распределение действий и значение состояния) и ValueHead (критик для APPO). Принимает выход ModelCore, возвращает логиты действий и скалярную оценку ценности состояния.
+3) Decoder — PolicyHead (линейный слой, выдающий распределение действий и значение состояния) и ValueHead (критик для APPO). Принимает выход ModelCore, возвращает логиты действий и скалярную оценку ценности состояния.
 
 На рис. @fig-arch приведена детальная архитектура PolicyModel: CNNEncoder, сменный модуль памяти (с четырьмя реализациями), и декодер. Пунктирной линией показан поток rnn_states, которым управляет Sample Factory.
 
@@ -547,7 +550,7 @@ Optuna, TPE-семплер (Tree Parzen Estimator), ASHA-прунинг посл
 
 Проведено 85 trials по 50M шагов, из которых 37 успешно завершились (54% прерываний из-за OOM или timeout). Схема пайплайна HPO приведена на рис. @fig-hpo. Завершившиеся trials представлены в табл. @tab-hpo-trials.
 
-Лучший trial #1: AdamW, lr=2.61e-4, d_model=512, d_state=64, headdim=64, recurrence=16, reward=17.01, best20=17.19. Финальная конфигурация выбрана близкой к лучшему trial: AdamW, d_model=512, d_state=128, headdim=128, recurrence=32, lr=4.05e-4, weight_decay=0.00196, expand=1. Пять лучших trials показаны на рис. @fig-hpo-top5, кривые их обучения — на рис. @fig-hpo-curves.
+Лучший trial #1: AdamW, lr=2.61e-4, d_model=512, d_state=64, headdim=64, recurrence=16, reward=17.01, best20=17.19. Финальная конфигурация выбрана близкой к лучшему trial: AdamW, d_model=512, d_state=128, headdim=128, recurrence=32, lr=4.05e-4, weight_decay=0.00196, expand=1 (табл. @tab-hpo). Пять лучших trials показаны на рис. @fig-hpo-top5, кривые их обучения — на рис. @fig-hpo-curves.
 
 #vkr-table(
   columns: (auto, auto, auto),
@@ -832,7 +835,7 @@ Perceiver IO — с 32 латентами не даёт приемлемого �
 
 Дальнейшие направления включают увеличение окна контекста Transformer до 256+ шагов (чтобы проверить, решит ли это проблему), гибридные VLA-модели вроде CombatVLA @chen2025combatvla, где Mamba-2 может выступать в роли backbone, и ablation studies для оценки вклада gradient checkpointing и размерности состояния SSM в общую производительность. Также представляет интерес полный прогон GLA и DeltaNet на 250M шагов — возможно, при большем бюджете эти архитектуры также выходят на плато, как Mamba-2.
 
-#bibliography("references.bib")
+#bibliography("references.bib", style: "gost-r-705-2008-numeric")
 
 #show: appendixes
 
