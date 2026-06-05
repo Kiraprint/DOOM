@@ -117,23 +117,38 @@
 
 = Список сокращений и условных обозначений
 
-#set list(marker: "—")
-- _APPO_ — Asynchronous Proximal Policy Optimization
-- _BPTT_ — Backpropagation Through Time
-- _FPS_ — Frames Per Second
-- _GPU_ — Graphics Processing Unit
-- _GRU_ — Gated Recurrent Unit
-- _HPO_ — Hyperparameter Optimization
-- _LSTM_ — Long Short-Term Memory
-- _MDP_ — Markov Decision Process
-- _POMDP_ — Partially Observable Markov Decision Process
-- _PPO_ — Proximal Policy Optimization
-- _RL_ — Reinforcement Learning
-- _SAC_ — Soft Actor-Critic
-- _SSM_ — State Space Model
-- _TPE_ — Tree-structured Parzen Estimator
-- _VRAM_ — Video Random Access Memory
-#set list(marker: "-")
+#[
+  #set par(first-line-indent: 0pt)
+  _APPO_ — Asynchronous Proximal Policy Optimization
+
+  _BPTT_ — Backpropagation Through Time
+
+  _FPS_ — Frames Per Second
+
+  _GPU_ — Graphics Processing Unit
+
+  _GRU_ — Gated Recurrent Unit
+
+  _HPO_ — Hyperparameter Optimization
+
+  _LSTM_ — Long Short-Term Memory
+
+  _MDP_ — Markov Decision Process
+
+  _POMDP_ — Partially Observable Markov Decision Process
+
+  _PPO_ — Proximal Policy Optimization
+
+  _RL_ — Reinforcement Learning
+
+  _SAC_ — Soft Actor-Critic
+
+  _SSM_ — State Space Model
+
+  _TPE_ — Tree-structured Parzen Estimator
+
+  _VRAM_ — Video Random Access Memory
+]
 
 = Термины и определения
 
