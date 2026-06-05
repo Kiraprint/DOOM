@@ -34,10 +34,13 @@
 #set text(font: "Times New Roman", size: 14pt)
 
 // Полуторный межстрочный интервал
-#set par(leading: 1em, spacing: 1em)
+#set par(leading: 1.05em, spacing: 1em)
 
-// Для подписей таблиц и рисунков — одинарный межстрочный
-#show figure.caption: set par(leading: 0pt)
+// Для подписей таблиц и рисунков — одинарный межстрочный, без доп. отступа снизу
+#show figure.caption: set par(leading: 0.37em, spacing: 0em)
+
+// Отступ после рисунка/подписи — полуторный (без лишней прокладки от шаблона)
+#show figure: it => block(it, above: 1.5em, below: 0.5em)
 
 // Для листингов кода — Courier New 12pt, ч/б, без подсветки
 #show raw: it => {
