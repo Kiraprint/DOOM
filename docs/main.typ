@@ -30,6 +30,9 @@
 
 // Переопределяем стили ПОСЛЕ gost.with() чтобы шаблон не перезаписал
 
+// Вторая и последующие строки заголовков — без абзацного отступа
+#set heading(hanging-indent: 0pt)
+
 // Шрифт документа — Times New Roman 14pt
 #set text(font: "Times New Roman", size: 14pt)
 
