@@ -115,23 +115,7 @@
 
 #outline(title: "Содержание")
 
-= Термины и определения
-
-#set list(marker: "—")
-- _Агент_ — программа, взаимодействующая со средой, выбирающая действия на основе наблюдений и получающая награду.
-- _Среда (окружение)_ — внешняя система, с которой взаимодействует агент; в данной работе — ViZDoom.
-- _Наблюдение (observation)_ — входные данные агента на каждом шаге; в визуальном RL — кадр изображения.
-- _Награда (reward)_ — численный сигнал от среды, который агент стремится максимизировать.
-- _Эпизод_ — последовательность шагов агента от начала до терминального состояния (смерть, завершение уровня).
-- _POMDP_ — марковский процесс принятия решений с частичной наблюдаемостью.
-- _Архитектура памяти_ — модуль нейросети, обрабатывающий последовательности наблюдений и поддерживающий скрытое состояние.
-- _Гиперпараметры (HP)_ — параметры модели и алгоритма обучения, задаваемые до начала эксперимента.
-- _Байесовская оптимизация (HPO)_ — метод поиска гиперпараметров, строящий вероятностную модель целевой функции.
-- _Gradient checkpointing_ — техника уменьшения потребления видеопамяти за счёт пересчёта промежуточных активаций на обратном проходе.
-- _Селективные SSM_ — модели пространства состояний, где параметры динамики зависят от входного сигнала.
-#set list(marker: "-")
-
-= Перечень сокращений и обозначений
+= Список сокращений и условных обозначений
 
 #set list(marker: "—")
 - _APPO_ — Asynchronous Proximal Policy Optimization
@@ -150,6 +134,33 @@
 - _TPE_ — Tree-structured Parzen Estimator
 - _VRAM_ — Video Random Access Memory
 #set list(marker: "-")
+
+= Термины и определения
+
+#[
+  #set par(first-line-indent: 0pt)
+  _Агент_ — программа, взаимодействующая со средой, выбирающая действия на основе наблюдений и получающая награду
+
+  _Среда (окружение)_ — внешняя система, с которой взаимодействует агент; в данной работе — ViZDoom
+
+  _Наблюдение (observation)_ — входные данные агента на каждом шаге; в визуальном RL — кадр изображения
+
+  _Награда (reward)_ — численный сигнал от среды, который агент стремится максимизировать
+
+  _Эпизод_ — последовательность шагов агента от начала до терминального состояния (смерть, завершение уровня)
+
+  _POMDP_ — марковский процесс принятия решений с частичной наблюдаемостью
+
+  _Архитектура памяти_ — модуль нейросети, обрабатывающий последовательности наблюдений и поддерживающий скрытое состояние
+
+  _Гиперпараметры (HP)_ — параметры модели и алгоритма обучения, задаваемые до начала эксперимента
+
+  _Байесовская оптимизация (HPO)_ — метод поиска гиперпараметров, строящий вероятностную модель целевой функции
+
+  _Gradient checkpointing_ — техника уменьшения потребления видеопамяти за счёт пересчёта промежуточных активаций на обратном проходе
+
+  _Селективные SSM_ — модели пространства состояний, где параметры динамики зависят от входного сигнала
+]
 
 = Введение
 
@@ -795,9 +806,7 @@ GRU с гиперпараметрами Mamba-2 выходит на 55% фина
 
 #show: appendixes
 
-= Листинги кода
-
-== Mamba2StateEncoder
+= Mamba2StateEncoder
 
 ```python
 class Mamba2StateEncoder:
@@ -828,9 +837,7 @@ class Mamba2StateEncoder:
         return conv_state, ssm_state
 ```
 
-Листинг В.1 — Mamba2StateEncoder
-
-== Mamba2Core.forward
+= Mamba2Core.forward
 
 ```python
 class Mamba2Core(ModelCore):
@@ -878,9 +885,7 @@ class Mamba2Core(ModelCore):
         return x, new_rnn_states
 ```
 
-Листинг В.2 — Mamba2Core.forward
-
-== Gradient checkpointing
+= Gradient checkpointing
 
 ```python
 def _forward_with_checkpointing(self, x: torch.Tensor) -> torch.Tensor:
@@ -899,9 +904,7 @@ def _forward_with_checkpointing(self, x: torch.Tensor) -> torch.Tensor:
     return output
 ```
 
-Листинг В.3 — Gradient checkpointing
-
-== Регистрация Mamba-2 в sample-factory
+= Регистрация Mamba-2 в sample-factory
 
 ```python
 class Mamba2Factory:
@@ -920,9 +923,7 @@ def register_mamba2(cfg=None):
     global_model_factory().register_model_core_factory(factory)
 ```
 
-Листинг В.4 — Регистрация Mamba-2 в sample-factory
-
-== TransformerCore
+= TransformerCore
 
 ```python
 class TransformerCore(ModelCore):
@@ -976,9 +977,7 @@ class TransformerCore(ModelCore):
         return x, new_rnn_states
 ```
 
-Листинг В.5 — TransformerCore
-
-== PerceiverCore
+= PerceiverCore
 
 ```python
 class PerceiverCore(ModelCore):
@@ -1032,11 +1031,7 @@ class PerceiverCore(ModelCore):
         return x, new_rnn_states
 ```
 
-Листинг В.6 — PerceiverCore
-
-= Конфигурации экспериментов
-
-== Базовая конфигурация (APPO)
+= Базовая конфигурация (APPO)
 
 #vkr-table(
   columns: 2,
@@ -1063,7 +1058,7 @@ class PerceiverCore(ModelCore):
   [num_minibatches], [1],
 )
 
-== Конфигурация Mamba-2 (HPO best trial #62)
+= Конфигурация Mamba-2 (HPO best trial #62)
 
 #vkr-table(
   columns: 2,
@@ -1083,7 +1078,7 @@ class PerceiverCore(ModelCore):
   [exploration_loss_coeff], [0.002],
 )
 
-== Конфигурация TransformerCore
+= Конфигурация TransformerCore
 
 #vkr-table(
   columns: 2,
@@ -1098,7 +1093,7 @@ class PerceiverCore(ModelCore):
   [rnn_type], [transformer],
 )
 
-== Конфигурация PerceiverCore
+= Конфигурация PerceiverCore
 
 #vkr-table(
   columns: 2,
@@ -1112,7 +1107,7 @@ class PerceiverCore(ModelCore):
   [rnn_type], [perceiver],
 )
 
-== Версии программного обеспечения
+= Версии программного обеспечения
 
 #vkr-table(
   columns: 2,
@@ -1126,7 +1121,7 @@ class PerceiverCore(ModelCore):
   [Python], [3.13.12],
 )
 
-== Потребление видеопамяти (core-only)
+= Потребление видеопамяти (core-only)
 
 В табл. @tab-vram-appendix сведены результаты замеров core-модулей (энкодер и декодер в расчёт не брались). Число параметров и потребление видеопамяти не всегда коррелируют напрямую: Mamba-2 с 0.9M параметров даёт 0.40 GB, а Perceiver IO, у которого параметров больше в 16 раз, — всего 0.42 GB. SSM-сканирование вынуждено хранить conv_state и ssm_state на каждом шаге, а латентный массив Perceiver IO фиксирован (32×512) и не растёт с длиной последовательности. Полная модель даёт 5–9 GB, основная доля уходит на свёрточный энкодер с его 4096 кадрами.
 
@@ -1138,6 +1133,6 @@ class PerceiverCore(ModelCore):
   [Mamba-2], [0.9M], [0.40 GB],
   [Mamba-1], [1.7M], [0.15 GB],
   [Transformer], [3.2M], [0.20 GB],
-  [Perceiver IO], [14.5M], [0.42 GB],
+  [Perceiver IO], [14.5M], [0.50 GB],
 )
 <tab-vram-appendix>
