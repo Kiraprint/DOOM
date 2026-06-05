@@ -839,19 +839,17 @@ Perceiver IO — с 32 латентами не даёт приемлемого �
 
 #show: appendixes
 
-= Mamba2StateEncoder
+= Листинг Mamba2StateEncoder
 
 ```python
 class Mamba2StateEncoder:
     """Encodes/decodes Mamba-2 internal state (conv_state + ssm_state)
     to/from a flat tensor that fits in rnn_states."""
-
     def __init__(self, d_ssm: int, d_conv_dim: int, nheads: int,
                  headdim: int, d_state: int, d_conv: int):
         self.conv_state_size = d_conv_dim * d_conv
         self.ssm_state_size = nheads  headdim  d_state
         self.total_size = self.conv_state_size + self.ssm_state_size
-
     def encode(self, conv_state, ssm_state) -> torch.Tensor:
         """Flatten conv_state (batch, d_conv_dim, d_conv)
            and ssm_state (batch, nheads, headdim, d_state)
@@ -859,7 +857,6 @@ class Mamba2StateEncoder:
         conv_flat = conv_state.reshape(conv_state.shape[0], -1)
         ssm_flat = ssm_state.reshape(ssm_state.shape[0], -1)
         return torch.cat([conv_flat, ssm_flat], dim=-1)
-
     def decode(self, flat_state, device=None, dtype=None):
         """Split flat tensor back into conv_state and ssm_state."""
         batch = flat_state.shape[0]
@@ -870,24 +867,21 @@ class Mamba2StateEncoder:
         return conv_state, ssm_state
 ```
 
-= Mamba2Core.forward
+= Листинг Mamba2Core.forward
 
 ```python
 class Mamba2Core(ModelCore):
     def forward(self, head_output, rnn_states):
         is_seq = not torch.is_tensor(head_output)
-
         if is_seq:
             # Training: PackedSequence -> (T, B, D)
             x_data = _unpack_packed_sequence_2d(head_output)
         else:
             # Inference: (B, D) -> (1, B, D)
             x_data = head_output.unsqueeze(0)
-
         # Mamba expects (B, T, D)
         x_data = x_data.permute(1, 0, 2)
         x_data = self.input_proj(x_data)
-
         if is_seq:
             # Training: process full sequence
             if getattr(self.cfg, 'gradient_checkpointing', True):
@@ -900,33 +894,26 @@ class Mamba2Core(ModelCore):
             inference_params = self._create_inference_params(batch_size)
             self._load_states_from_rnn(inference_params, rnn_states)
             inference_params.seqlen_offset = 1
-
             for norm, wrapped in zip(self.mamba_norms, self.mamba_wrapped):
                 x_data = wrapped(norm(x_data),
                                inference_params=inference_params)
-
             new_rnn_states = self._get_inference_states(inference_params)
-
         x_data = x_data.permute(1, 0, 2)  # back to (T, B, D)
-
         if is_seq:
             x = _pack_to_2d_sequence(x_data, head_output)
             new_rnn_states = rnn_states
         else:
             x = x_data.squeeze(0)
-
         return x, new_rnn_states
 ```
 
-= Gradient checkpointing
+= Листинг Gradient checkpointing
 
 ```python
 def _forward_with_checkpointing(self, x: torch.Tensor) -> torch.Tensor:
     from torch.utils.checkpoint import checkpoint
-
     def segment_forward(x, norm, mamba_layer):
         return mamba_layer(norm(x))
-
     output = x
     for norm, wrapped in zip(self.mamba_norms, self.mamba_wrapped):
         output = checkpoint(
@@ -937,7 +924,7 @@ def _forward_with_checkpointing(self, x: torch.Tensor) -> torch.Tensor:
     return output
 ```
 
-= Регистрация Mamba-2 в sample-factory
+= Листинг Регистрация Mamba-2 в sample-factory
 
 ```python
 class Mamba2Factory:
@@ -949,14 +936,13 @@ class Mamba2Factory:
             cfg.rnn_num_layers = self._num_layers
             return Mamba2Core(cfg, core_input_size)
         return default_make_core_func(cfg, core_input_size)
-
 def register_mamba2(cfg=None):
     num_layers = cfg.rnn_num_layers if cfg is not None else 1
     factory = Mamba2Factory(num_layers)
     global_model_factory().register_model_core_factory(factory)
 ```
 
-= TransformerCore
+= Листинг TransformerCore
 
 ```python
 class TransformerCore(ModelCore):
@@ -966,7 +952,6 @@ class TransformerCore(ModelCore):
         self.num_layers = getattr(cfg, 'transformer_num_layers', cfg.rnn_num_layers)
         self.window_size = getattr(cfg, 'transformer_window_size', 64)
         self.dim_feedforward = getattr(cfg, 'transformer_dim_feedforward', self.d_model * 4)
-
         self.state_encoder = TransformerStateEncoder(self.d_model, self.window_size)
         self.layers = nn.ModuleList()
         for _ in range(self.num_layers):
@@ -976,18 +961,15 @@ class TransformerCore(ModelCore):
                 dropout=0.1, activation='gelu',
                 batch_first=True, norm_first=True,
             ))
-
         self.input_proj = nn.Linear(input_size, self.d_model)
         self.pos_embedding = nn.Parameter(
             torch.randn(1, self.window_size, self.d_model) * 0.02)
         self.core_output_size = self.d_model
-
     def forward(self, head_output, rnn_states):
         # unpack, project -> (B, T, D)
         x_data = _unpack_packed_sequence_2d(head_output).permute(1, 0, 2)
         x_data = self.input_proj(x_data)
         B, T, D = x_data.shape
-
         if T > 1:  # Training: causal mask
             x_data = x_data + self.pos_embedding[:, :T, :]
             mask = _causal_mask(T, x_data.device)
@@ -1004,13 +986,12 @@ class TransformerCore(ModelCore):
                 buffer = layer(buffer, src_mask=mask)
             out = buffer[:, -1:, :]
             new_rnn_states = self.state_encoder.encode(buffer.detach())
-
         out = out.permute(1, 0, 2)
         x = _pack_to_2d_sequence(out.expand(T, -1, -1).contiguous(), head_output)
         return x, new_rnn_states
 ```
 
-= PerceiverCore
+= Листинг PerceiverCore
 
 ```python
 class PerceiverCore(ModelCore):
@@ -1018,12 +999,10 @@ class PerceiverCore(ModelCore):
         self.num_latents = getattr(cfg, 'perceiver_num_latents', 32)
         self.d_latents = getattr(cfg, 'perceiver_d_latents', 512)
         self.num_blocks = getattr(cfg, 'perceiver_num_blocks', 2)
-
         self.state_encoder = PerceiverStateEncoder(self.num_latents, self.d_latents)
         self.input_proj = nn.Linear(input_size, self.d_model)
         self.latent = nn.Parameter(torch.randn(1, self.num_latents, self.d_latents) * 0.02)
         self.pos_encoding = nn.Parameter(torch.randn(1, 1024, self.d_model) * 0.02)
-
         self.cross_blocks = nn.ModuleList([
             CrossAttentionBlock(self.d_latents, self.d_model, num_heads=8)
             for _ in range(self.num_blocks)
@@ -1035,12 +1014,10 @@ class PerceiverCore(ModelCore):
         self.output_proj = nn.Sequential(
             nn.LayerNorm(self.d_latents), nn.Linear(self.d_latents, self.d_model))
         self.core_output_size = self.d_model
-
     def forward(self, head_output, rnn_states):
         x_data = _unpack_packed_sequence_2d(head_output).permute(1, 0, 2)
         x_data = self.input_proj(x_data)
         B, T, D = x_data.shape
-
         if T > 1:  # Training
             x_data = x_data + self.pos_encoding[:, :T, :]
             latent = self.latent.expand(B, -1, -1)
@@ -1058,7 +1035,6 @@ class PerceiverCore(ModelCore):
             latent = self.self_blocks[0](latent)
             out = self.output_proj(latent.mean(dim=1)).unsqueeze(1)
             new_rnn_states = self.state_encoder.encode(latent.detach())
-
         out = out.permute(1, 0, 2)
         x = _pack_to_2d_sequence(out.expand(T, -1, -1).contiguous(), head_output)
         return x, new_rnn_states
