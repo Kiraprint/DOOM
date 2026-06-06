@@ -39,6 +39,13 @@
 // Полуторный межстрочный интервал
 #set par(leading: 1.05em, spacing: 1em)
 
+// Для библиографии — межстрочный 1.05em, нумерация 0.5см от левого поля
+#show bibliography: it => {
+  set block(inset: (left: 5mm))
+  set par(leading: 1.05em)
+  it
+}
+
 // Для подписей таблиц и рисунков — одинарный межстрочный, без доп. отступа снизу
 #show figure.caption: set par(leading: 0.37em, spacing: 0em)
 
@@ -835,7 +842,7 @@ Perceiver IO — с 32 латентами не даёт приемлемого �
 
 Дальнейшие направления включают увеличение окна контекста Transformer до 256+ шагов (чтобы проверить, решит ли это проблему), гибридные VLA-модели вроде CombatVLA @chen2025combatvla, где Mamba-2 может выступать в роли backbone, и ablation studies для оценки вклада gradient checkpointing и размерности состояния SSM в общую производительность. Также представляет интерес полный прогон GLA и DeltaNet на 250M шагов — возможно, при большем бюджете эти архитектуры также выходят на плато, как Mamba-2.
 
-#bibliography("references.bib", style: "gost-r-705-2008-numeric")
+#bibliography("references.bib", style: "7322017_typst_final.csl")
 
 #show: appendixes
 

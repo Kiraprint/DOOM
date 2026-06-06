@@ -1,0 +1,444 @@
+<?xml version="1.0.2" encoding="utf-8"?>
+
+<style xmlns="http://purl.org/net/xbiblio/csl"
+       version="1.0.2"
+       class="in-text">
+
+  <info>
+    <title>ГОСТ 7.32-2017 (Typst Compatible)</title>
+
+    <id>
+      https://example.org/gost-732-2017-typst
+    </id>
+
+    <link
+        href="https://example.org/gost-732-2017-typst"
+        rel="self"/>
+
+    <author>
+      <name>Custom Typst CSL</name>
+    </author>
+
+    <category citation-format="numeric"/>
+
+    <updated>
+      2026-06-06T00:00:00+00:00
+    </updated>
+
+    <rights>
+      CC-BY-SA
+    </rights>
+  </info>
+
+  <!-- ========================= -->
+  <!-- LOCALE -->
+  <!-- ========================= -->
+
+  <locale xml:lang="ru">
+    <terms>
+
+      <term name="editor">под ред.</term>
+
+      <term name="et-al">и др.</term>
+
+      <term name="page" form="short">
+        с.
+      </term>
+
+      <term name="issue" form="short">
+        №
+      </term>
+
+      <term name="volume" form="short">
+        Т.
+      </term>
+
+    </terms>
+  </locale>
+
+  <!-- ========================= -->
+  <!-- AUTHORS -->
+  <!-- ========================= -->
+
+  <macro name="authors">
+    <names variable="author">
+
+      <name
+          delimiter=", "
+          initialize-with="."
+          name-as-sort-order="all"/>
+
+      <et-al/>
+
+    </names>
+  </macro>
+
+  <!-- ========================= -->
+  <!-- EDITORS (label AFTER name for "под ред. Name") -->
+  <!-- ========================= -->
+
+  <macro name="editors">
+    <names variable="editor">
+
+      <name
+          delimiter=", "
+          initialize-with="."/>
+
+      <label
+          prefix=" "
+          form="short"/>
+
+    </names>
+  </macro>
+
+  <!-- ========================= -->
+  <!-- TITLE -->
+  <!-- ========================= -->
+
+  <macro name="title">
+    <text variable="title"/>
+  </macro>
+
+  <!-- ========================= -->
+  <!-- CONTAINER -->
+  <!-- ========================= -->
+
+  <macro name="container">
+    <text variable="container-title"/>
+  </macro>
+
+  <!-- ========================= -->
+  <!-- YEAR -->
+  <!-- ========================= -->
+
+  <macro name="year">
+    <date variable="issued">
+
+      <date-part name="year"/>
+
+    </date>
+  </macro>
+
+  <!-- ========================= -->
+  <!-- PAGES -->
+  <!-- ========================= -->
+
+  <macro name="pages">
+    <group>
+
+      <text value="С."/>
+
+      <text
+          variable="page"
+          prefix=""/>
+
+    </group>
+  </macro>
+
+  <!-- ========================= -->
+  <!-- PUBLISHER -->
+  <!-- ========================= -->
+
+  <macro name="publisher">
+
+    <group delimiter=": ">
+
+      <text variable="publisher-place"/>
+
+      <text variable="publisher"/>
+
+    </group>
+
+  </macro>
+
+  <!-- ========================= -->
+  <!-- URL -->
+  <!-- ========================= -->
+
+  <macro name="url">
+    <group>
+
+      <text value="URL: "/>
+
+      <text variable="URL"/>
+
+    </group>
+  </macro>
+
+  <!-- ========================= -->
+  <!-- ACCESSED -->
+  <!-- ========================= -->
+
+  <macro name="accessed">
+    <group prefix=" (дата обращения " suffix=")">
+      <date variable="accessed">
+        <date-part name="day" form="numeric-leading-zeros" suffix="."/>
+        <date-part name="month" form="numeric-leading-zeros" suffix="."/>
+        <date-part name="year"/>
+      </date>
+    </group>
+  </macro>
+
+  <!-- Macro for checking if source is online -->
+  <macro name="is-online">
+    <choose>
+      <if variable="URL">
+        <text value=" [Электронный ресурс]"/>
+      </if>
+    </choose>
+  </macro>
+
+  <!-- ========================= -->
+  <!-- CITATION -->
+  <!-- ========================= -->
+
+  <citation>
+
+    <layout
+        prefix="["
+        suffix="]"
+        delimiter=", ">
+
+      <text variable="citation-number"/>
+
+    </layout>
+
+  </citation>
+
+  <!-- ========================= -->
+  <!-- BIBLIOGRAPHY -->
+  <!-- ========================= -->
+
+  <bibliography
+      et-al-min="4"
+      et-al-use-first="3"
+      second-field-align="flush"
+      entry-spacing="0">
+
+    <sort>
+      <key variable="citation-number"/>
+    </sort>
+
+    <layout suffix=".">
+
+      <text variable="citation-number" suffix=". "/>
+
+      <choose>
+
+        <!-- ========================= -->
+        <!-- JOURNAL ARTICLE -->
+        <!-- ========================= -->
+
+        <if type="article-journal">
+
+          <group delimiter=" // ">
+
+            <group delimiter=". ">
+
+              <text macro="authors"/>
+
+              <text macro="title"/>
+
+            </group>
+
+            <text macro="container"/>
+
+          </group>
+
+          <choose>
+            <if variable="URL">
+              <text value=" [Электронный ресурс]. – "/>
+            </if>
+            <else>
+              <text value=". – "/>
+            </else>
+          </choose>
+
+          <text macro="year"/>
+
+          <text value=". – "/>
+
+          <group delimiter=", ">
+
+            <choose>
+
+              <if variable="volume">
+
+                <group>
+
+                  <text value="Vol. "/>
+
+                  <text variable="volume"/>
+
+                </group>
+
+              </if>
+            </choose>
+
+            <choose>
+
+              <if variable="issue">
+
+                <group>
+
+                  <text value="N "/>
+
+                  <text variable="issue"/>
+
+                </group>
+
+              </if>
+            </choose>
+
+          </group>
+
+          <text value=". – "/>
+
+          <text macro="pages"/>
+
+          <choose>
+            <if variable="URL">
+              <text value=". – "/>
+              <text macro="url"/>
+              <text macro="accessed"/>
+            </if>
+          </choose>
+
+        </if>
+
+        <!-- ========================= -->
+        <!-- BOOK (title FIRST, then / authors) -->
+        <!-- ========================= -->
+
+        <else-if type="book">
+
+          <group delimiter=". ">
+
+            <text macro="title"/>
+
+            <group delimiter="; ">
+
+              <group>
+                <text macro="authors" prefix=" / "/>
+              </group>
+
+              <choose>
+                <if variable="editor">
+                  <group prefix="; ">
+                    <text value="под ред. "/>
+                    <names variable="editor">
+                      <name delimiter=", " initialize-with="." name-as-sort-order="all"/>
+                    </names>
+                  </group>
+                </if>
+              </choose>
+
+            </group>
+
+          </group>
+
+          <choose>
+            <if variable="URL">
+              <text value=" [Электронный ресурс]. – "/>
+            </if>
+            <else>
+              <text value=". – "/>
+            </else>
+          </choose>
+
+          <text macro="publisher"/>
+
+          <text value=", "/>
+
+          <text macro="year"/>
+
+          <choose>
+
+            <if variable="number-of-pages">
+
+              <group>
+
+                <text value=". – "/>
+
+                <text variable="number-of-pages"/>
+
+                <text value=" с."/>
+
+              </group>
+
+            </if>
+
+          </choose>
+
+          <choose>
+            <if variable="URL">
+              <text value=". – "/>
+              <text macro="url"/>
+              <text macro="accessed"/>
+            </if>
+          </choose>
+
+        </else-if>
+
+        <!-- ========================= -->
+        <!-- WEB (with [Электронный ресурс]) -->
+        <!-- ========================= -->
+
+        <else-if type="webpage">
+
+          <text macro="title"/>
+
+          <text value=" [Электронный ресурс]. – "/>
+
+          <text macro="year"/>
+
+          <text value=". – "/>
+
+          <text macro="url"/>
+
+          <text macro="accessed"/>
+
+        </else-if>
+
+        <!-- ========================= -->
+        <!-- FALLBACK (все остальные типы: misc, inproceedings и т.д.) -->
+        <!-- ========================= -->
+
+        <else>
+
+          <group delimiter=". ">
+
+            <text macro="authors"/>
+
+            <text macro="title"/>
+
+          </group>
+
+          <choose>
+            <if variable="URL">
+              <text value=" [Электронный ресурс]. – "/>
+            </if>
+            <else>
+              <text value=". – "/>
+            </else>
+          </choose>
+
+          <text macro="year"/>
+
+          <choose>
+            <if variable="URL">
+              <text value=". – "/>
+              <text macro="url"/>
+              <text macro="accessed"/>
+            </if>
+          </choose>
+
+        </else>
+
+      </choose>
+
+    </layout>
+
+  </bibliography>
+
+</style>
