@@ -27,7 +27,7 @@ run_mamba2_250m_chain() {
         log "Mamba-2 250M seed${s}"
         bash reproduce.sh --mamba2-250m-seed${s}
         # Verify completion
-        if grep -q "Total num frames: 24[0-9]" train_dir/mamba2_250m_seed${s}/sf_log.txt 2>/dev/null; then
+        if grep -q "Total num frames: 2[45][0-9]" train_dir/mamba2_250m_seed${s}/sf_log.txt 2>/dev/null; then
             log "  ✓ seed${s} completed"
         else
             log "  ✗ seed${s} may have failed — check train_dir/mamba2_250m_seed${s}/"

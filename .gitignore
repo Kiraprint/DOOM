@@ -28,3 +28,6 @@ session-*.md
 *.jpg
 *.jpeg
 .worktrees/
+.omo/
+_vizdoom/hpo/
+notebooks/

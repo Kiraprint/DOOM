@@ -49,10 +49,10 @@ section() { log ""; log "══════════════════�
 
 check_env() {
     log "Checking environment..."
-    python3 -c "import torch; print(f'PyTorch {torch.__version__}')" 2>/dev/null || err "PyTorch not installed. Run: pip install -r requirements.txt"
-    python3 -c "import sample_factory; print(f'Sample-Factory {sample_factory.__version__}')" 2>/dev/null || log "WARN: sample_factory version unknown"
-    python3 -c "import torch; assert torch.cuda.is_available(), \"No CUDA GPU found\"" 2>/dev/null || err "CUDA GPU required"
-    python3 -c "
+    uv run python3 -c "import torch; print(f'PyTorch {torch.__version__}')" 2>/dev/null || err "PyTorch not installed. Run: pip install -r requirements.txt"
+    uv run python3 -c "import sample_factory; print(f'Sample-Factory {sample_factory.__version__}')" 2>/dev/null || log "WARN: sample_factory version unknown"
+    uv run python3 -c "import torch; assert torch.cuda.is_available(), \"No CUDA GPU found\"" 2>/dev/null || err "CUDA GPU required"
+    uv run python3 -c "
 import torch
 d = torch.cuda.get_device_properties(0)
 mem = d.total_memory / 1024**3
