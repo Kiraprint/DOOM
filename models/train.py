@@ -60,7 +60,7 @@ from sf_examples.vizdoom.doom.doom_utils import DOOM_ENVS, make_doom_env_from_sp
 def main():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--rnn_type", default="gru",
-                        choices=["gru", "mamba2", "mamba1", "transformer", "perceiver"])
+                        choices=["gru", "mamba2", "mamba3", "mamba1", "gdn", "transformer", "perceiver"])
     parser.add_argument("--weight_decay", type=float, default=None)
     parser.add_argument("--gradient_checkpointing", type=str, default=None,
                         choices=["True", "False"], help="Override gradient checkpointing")
@@ -68,6 +68,7 @@ def main():
                         help="Override training steps")
     # Mamba-2 params
     parser.add_argument("--mamba_d_model", type=int, default=512)
+    parser.add_argument("--mamba_chunk_size", type=int, default=32, help="Mamba-3 chunk size (default: 32, low shared memory)")
     parser.add_argument("--mamba_d_state", type=int, default=64)
     parser.add_argument("--mamba_d_conv", type=int, default=4)
     parser.add_argument("--mamba_expand", type=int, default=1)
@@ -78,6 +79,12 @@ def main():
     parser.add_argument("--mamba1_d_state", type=int, default=16)
     parser.add_argument("--mamba1_d_conv", type=int, default=4)
     parser.add_argument("--mamba1_expand", type=int, default=2)
+    # GatedDeltaNet (FLA) params
+    parser.add_argument("--gdn_d_model", type=int, default=512)
+    parser.add_argument("--gdn_nheads", type=int, default=8)
+    parser.add_argument("--gdn_head_dim", type=int, default=64)
+    parser.add_argument("--gdn_expand_v", type=float, default=2)
+    parser.add_argument("--gdn_conv_size", type=int, default=4)
     # Transformer params
     parser.add_argument("--transformer_d_model", type=int, default=512)
     parser.add_argument("--transformer_nhead", type=int, default=8)
@@ -103,7 +110,7 @@ def main():
     # SF parser only accepts gru/lstm for --rnn_type.
     # For custom rnn_types, pass gru to satisfy validation, then override after.
     sf_rnn_type = extra_args.rnn_type
-    if sf_rnn_type in ("mamba2", "mamba1", "transformer", "perceiver"):
+    if sf_rnn_type in ("mamba2", "mamba3", "mamba1", "gdn", "transformer", "perceiver"):
         sf_rnn_type = "gru"
 
     # Build SF args with fixed env/worker config
@@ -150,6 +157,27 @@ def main():
         cfg.mamba_ngroups = extra_args.mamba_ngroups
         register_mamba2(cfg)
         cfg.rnn_size = max(cfg.rnn_size, get_mamba2_required_rnn_size(cfg))
+
+    elif extra_args.rnn_type == "mamba3":
+        from models.mamba3_core import register_mamba3, get_mamba3_required_rnn_size
+        cfg.mamba_d_model = extra_args.mamba_d_model
+        cfg.mamba_d_state = extra_args.mamba_d_state
+        cfg.mamba_expand = extra_args.mamba_expand
+        cfg.mamba_headdim = extra_args.mamba_headdim
+        cfg.mamba_ngroups = extra_args.mamba_ngroups
+        cfg.mamba_chunk_size = extra_args.mamba_chunk_size
+        register_mamba3(cfg)
+        cfg.rnn_size = max(cfg.rnn_size, get_mamba3_required_rnn_size(cfg))
+
+    elif extra_args.rnn_type == "gdn":
+        from models.gdn_core import register_gdn, get_gdn_required_rnn_size
+        cfg.gdn_d_model = extra_args.gdn_d_model
+        cfg.gdn_nheads = extra_args.gdn_nheads
+        cfg.gdn_head_dim = extra_args.gdn_head_dim
+        cfg.gdn_expand_v = extra_args.gdn_expand_v
+        cfg.gdn_conv_size = extra_args.gdn_conv_size
+        register_gdn(cfg)
+        cfg.rnn_size = max(cfg.rnn_size, get_gdn_required_rnn_size(cfg))
 
     elif extra_args.rnn_type == "mamba1":
         from models.mamba1_core import register_mamba1, get_mamba1_required_rnn_size
