@@ -1,0 +1,33 @@
+--- learner.py.bak_optimizers_ext	2026-11-21 20:15:04.223151625 +0300
++++ learner.py	2026-11-21 20:15:04.271151589 +0300
+@@ -225,22 +225,15 @@
+ 
+         params = list(self.actor_critic.parameters())
+ 
+-        optimizer_cls = dict(adam=torch.optim.Adam, lamb=Lamb)
+-        if self.cfg.optimizer not in optimizer_cls:
+-            raise RuntimeError(f"Unknown optimizer {self.cfg.optimizer}")
++        # --- optimizer patch (optimizers_ext) ---
++        # Stock Sample Factory accepts only adam/lamb here and never passes
++        # weight_decay to either, so cfg.weight_decay had no effect on any run
++        # recorded before this patch. Both are fixed by delegating to the
++        # optimizer table in optimizers_ext, which is imported by path because
++        # this file lives in site-packages.
++        from optimizers_ext import build_optimizer
+ 
+-        optimizer_cls = optimizer_cls[self.cfg.optimizer]
+-        log.debug(f"Using optimizer {optimizer_cls}")
+-
+-        optimizer_kwargs = dict(
+-            lr=self.cfg.learning_rate,  # use default lr only in ctor, then we use the one loaded from the checkpoint
+-            betas=(self.cfg.adam_beta1, self.cfg.adam_beta2),
+-        )
+-
+-        if self.cfg.optimizer in ["adam", "lamb"]:
+-            optimizer_kwargs["eps"] = self.cfg.adam_eps
+-
+-        self.optimizer = optimizer_cls(params, **optimizer_kwargs)
++        self.optimizer = build_optimizer(self.cfg, params)
+ 
+         self.load_from_checkpoint(self.policy_id)
+         self.param_server.init(self.actor_critic, self.train_step, self.device)

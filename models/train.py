@@ -52,12 +52,19 @@ from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.train import run_rl
 
+from optimizers_ext import describe, install
+
 from sf_examples.vizdoom.doom.doom_model import make_vizdoom_encoder
 from sf_examples.vizdoom.doom.doom_params import add_doom_env_args, doom_override_defaults
 from sf_examples.vizdoom.doom.doom_utils import DOOM_ENVS, make_doom_env_from_spec
 
 
 def main():
+    # Rewrites the installed learner's optimizer block (idempotent). Done before
+    # run_rl so the file is patched before any worker spawns, and recorded in
+    # cfg so every config.json says which build produced the run.
+    _optim_record = install()
+
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--rnn_type", default="gru",
                         choices=["gru", "mamba2", "mamba3", "mamba1", "gdn", "transformer", "perceiver"])
@@ -99,6 +106,15 @@ def main():
     parser.add_argument("--perceiver_num_blocks", type=int, default=2)
     parser.add_argument("--perceiver_num_heads", type=int, default=8)
     parser.add_argument("--perceiver_dropout", type=float, default=0.1)
+    # Stock Sample Factory only accepts adam/lamb; adamw and muon reach cfg via
+    # the override below and take effect through optimizers_ext.install().
+    parser.add_argument("--optimizer", type=str, default=None,
+                        choices=["adam", "adamw", "lamb", "muon"])
+    # Muon's orthogonalised update needs its own scale: the first Muon arm ran the
+    # AdamW fallback group at the Muon lr (0.02, 50x the tuned 4.05e-4) and never
+    # learned. This flag sets the matrix-group lr only; --learning_rate stays the
+    # AdamW fallback lr, so a Muon arm differs from an Adam arm in one respect.
+    parser.add_argument("--muon_lr", type=float, default=None)
     extra_args, remaining = parser.parse_known_args()
 
     # Register Doom environments and encoder
@@ -136,8 +152,17 @@ def main():
     cfg = parse_full_cfg(parser_sf, argv)
 
     # Apply extra params
+    if getattr(extra_args, "optimizer", None) is not None:
+        # SF's own choices are adam/lamb only; adamw and muon are unknown to the
+        # stock parser, so the override happens after parsing. The patch below is
+        # what makes the choice effective (see optimizers_ext).
+        cfg.optimizer = extra_args.optimizer
     if extra_args.weight_decay is not None:
+        # Stock Sample Factory never passes cfg.weight_decay to any optimizer
+        # (learner.py:228-243), so without the patch below this knob was inert.
         cfg.weight_decay = extra_args.weight_decay
+    if extra_args.muon_lr is not None:
+        cfg.muon_lr = float(extra_args.muon_lr)
     if extra_args.gradient_checkpointing is not None:
         cfg.gradient_checkpointing = extra_args.gradient_checkpointing == "True"
     if extra_args.train_for_env_steps is not None:
@@ -210,8 +235,14 @@ def main():
         register_perceiver(cfg)
         cfg.rnn_size = max(cfg.rnn_size, get_perceiver_required_rnn_size(cfg))
 
+    from optimizers_ext import describe
+    cfg._optimizer_patch = describe(_optim_record)
+    cfg.weight_decay = float(getattr(cfg, "weight_decay", 0.0) or 0.0)
+
     print(f"\nStarting experiment: {cfg.experiment}")
     print(f"  rnn_type={cfg.rnn_type}, optimizer={cfg.optimizer}, lr={cfg.learning_rate}")
+    print(f"  {cfg._optimizer_patch}")
+    print(f"  effective weight_decay={cfg.weight_decay}")
     print(f"  rnn_size={cfg.rnn_size}, batch={cfg.batch_size}, workers={cfg.num_workers}x{cfg.num_envs_per_worker}")
     if hasattr(cfg, 'weight_decay'):
         print(f"  weight_decay={cfg.weight_decay}")
