@@ -94,16 +94,23 @@ WITHDRAWN: the muon cell. Two defects in optimizers_ext.Muon made it test
 
 5. NEXT, RUNNING IN PARALLEL FROM SEPARATE WORKTREES (jobs 3044-3067)
 ---------------------------------------------------------------------
-  track wd   /nfs/home/kfedorin/wt/wd    9 cells @50M  decay curve at 5e-4 and
-                                                     8e-3, plus coupled-L2 2e-4
-                                                     to test magnitude-vs-mechanism
+  track wd   /nfs/home/kfedorin/wt/wd   12 cells @50M  decay curve at 5e-4 and
+                                                     8e-3, coupled-L2 2e-4 to
+                                                     test magnitude-vs-mechanism,
+                                                     and adamw at 2x lr (8.1e-4)
+                                                     to remove the confound that
+                                                     the 4.05e-4 lr was tuned for
+                                                     Adam, not for AdamW
   track muon /nfs/home/kfedorin/wt/muon  9 cells @50M  Muon with the fixed
                                                      fallback: lr 5e-3, 2e-2, 2e-2+wd
   track long /nfs/home/kfedorin/wt/long  6 cells @250M adam vs adamw at the
                                                      campaign's headline budget
 
-Submitted per track with scripts/submit_track.py (skips cells whose config.json
-already exists). Code state: branch exp/optim-patch, commit e5dc896 on the
+Submitted per track with scripts/submit_track.py, which skips a cell whose
+config.json exists AND a cell whose job name is already in the queue -- the
+second check matters because config.json only appears once a cell starts, so
+re-running a track would otherwise double-submit its pending cells (observed:
+35 queued jobs for 24 cells, deduplicated to 27). Code state: branch exp/optim-patch, commit e5dc896 on the
 cluster; the same files are mirrored to this repo's optim/ directory.
 
 6. REPRODUCTION
