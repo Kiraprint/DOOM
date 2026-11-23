@@ -1,0 +1,117 @@
+OPTIMIZER ABLATION, DOOM BENCHMARK -- CYCLE 1 AND THE REPRODUCIBILITY DEFECT IT FOUND
+======================================================================================
+
+1. THE DEFECT (verified against the installed library)
+------------------------------------------------------
+sample_factory 2.1.1 constructs its optimizer from a literal dict and passes it
+only three kwargs:
+
+    learner.py:228   optimizer_cls = dict(adam=torch.optim.Adam, lamb=Lamb)
+    learner.py:~243  self.optimizer = optimizer_cls(params, lr=..., betas=..., eps=...)
+
+cfg.weight_decay is never read anywhere in sample_factory outside Lamb's own
+constructor default. Consequences for the campaign:
+
+  * 249 recorded run configs: 0 used adamw, 15 used lamb (which then ran with
+    Lamb's default weight_decay=1e-4, NOT the sampled value), the rest adam with
+    a recorded weight_decay between 1.1e-5 and 0.095 that reached nothing.
+    This includes the released gru_250m_baseline (weight_decay 0.00196).
+  * the HPO searched weight_decay loguniform 1e-5..1e-1 and sampled 72 distinct
+    values across 86 trials; none of them changed a single update.
+  * --optimizer choices in sample_factory are adam|lamb, so the second part of
+    the dimension was equally decorative.
+
+CORRECTION to an earlier claim in this work (commit 00fc224's message said "39 of
+44 such HPO trials died in 5 s [from argparse]"): that is WRONG. Reading
+hpo_study.db's trial_user_attributes rather than inferring from durations:
+
+     35 of 41 FAIL trials with an error message failed on
+        "unable to allocate shared memory(shm) for file </torch_*>: Success (0)"
+        4 on "torch._C._CudaDeviceProperties object has no attribute 'total_mem'"
+     7 FAIL trials are at the adam index and 34 at the adamw index, so the
+        optimizer is not the discriminator;
+     22 adamw-index trials COMPLETED, with durations up to 4159 s.
+
+So the dimension was inert, not fatal. Additionally the study's code state is not
+recoverable: the recorded study has three optimizer categories (including adamw),
+while the cluster's current hpo/search_space.py restricts the dimension to
+["adam","lamb"] and hpo/evaluate.py hard-codes "--optimizer", "adam".
+
+What IS verified and unchanged: no recorded run had its weight_decay reach an
+optimizer, and adamw was never an available SF choice. Any claim that the HPO's
+"GRU+HPO" gain came from tuning weight_decay or optimizer is unsupported; the
+effective search space was lr (72 distinct values), exploration_loss_coeff (72),
+rnn_num_layers, and the mamba_*/transformer_*/perceiver_* architecture knobs.
+
+2. CYCLE 1 GRID (12 cells, 50M frames, GRU 512, seeds 41/42/43, one 2080 Ti each)
+---------------------------------------------------------------------------------
+Jobs 2170-2181; all completed; 0.46-0.55 h per cell. lr 4.05e-4, exploration
+coefficient 0.00202, lr_schedule constant, adam_eps 1e-6, batch 4096, 8x8 envs.
+Metric: last20 = mean of the last 20 per-iteration "Avg episode reward" lines,
+parsed with the campaign's own agg_runs.parse_log.
+
+  arm                          optimizer      wd        per-seed last20       mean +- s.d.   paired D vs adam+wd0
+  optim_adam_wd0_50m           adam (L2)      0         15.38/15.87/15.77     15.67 +- 0.26  reference
+  optim_adam_wd_50m            adam (L2)      1.96e-3   10.08/10.72/ 9.74     10.18 +- 0.50  -5.49 +- 0.48
+  optim_adamw_50m              adamw          1.96e-3   18.90/16.21/15.03     16.72 +- 1.98  +1.04 +- 2.21
+  optim_muon_50m               muon lr 0.02   1.96e-3    1.44/ 1.31/ 1.33      1.36 +- 0.07  -14.31 +- 0.33  [WITHDRAWN]
+
+Learning curves (mean of 8 equal buckets of the reward series, seed 1):
+  adam+wd0     4.34 10.10 12.03 13.32 14.13 14.56 15.45 15.55   climbs, plateaus ~15.5
+  adam+L2 wd   3.26  6.61  8.03  8.45  8.78  9.23  9.52  9.89   same shape, ~40% lower
+  adamw wd     5.16  9.98 11.88 14.35 15.29 17.24 17.34 18.32   climbs fastest, ends ~18
+  muon lr .02  1.14  1.36  1.56  1.54  1.31  1.37  1.39  1.42   never learns
+
+3. WHY COUPLED L2 HURTS: A MECHANISM, NOT A TUNING EFFECT
+---------------------------------------------------------
+torch.optim.Adam(weight_decay=wd) adds wd*theta to the gradient; Adam then
+divides by sqrt(v)+eps. For any parameter whose own gradient is small relative to
+the decay term, the normalised step becomes approx +-lr regardless of how small
+wd is -- the decay IS the update. Measured at this campaign's real lr and eps
+(200 updates on a 64x64 tensor, deliberately tiny gradients):
+
+  adam, coupled L2, wd 1.96e-3 : ||theta|| 3.179 -> 1.202  (-62%)
+  adamw, decoupled, wd 1.96e-3 : ||theta|| 3.129 -> 3.159  (+1%)
+
+A 50M-frame run makes ~12.2k updates (50M/4096), so the coupled arm sits under
+continuous shrinkage for the whole run. This is why the HPO's weight_decay range
+could never have been useful through the adam path, independently of the fact
+that it was never plumbed.
+
+4. WHAT IS AND IS NOT ESTABLISHED
+---------------------------------
+ESTABLISHED: coupled L2 under Adam at eps 1e-6 costs -5.49 +- 0.48 vs no decay
+  (paired, 3 seeds), with a mechanism demonstrated at the same lr/eps.
+ESTABLISHED: decoupled decay at the same wd is not equivalent to coupled L2, and
+  differs from no decay by +1.04 +- 2.21 -- i.e. NOT a demonstrated improvement.
+NOT ESTABLISHED: that AdamW helps on this task; n=3 and the interval includes 0.
+WITHDRAWN: the muon cell. Two defects in optimizers_ext.Muon made it test
+  something else: (a) the AdamW fallback group inherited the Muon lr, so
+  embeddings/biases/norms were driven at 0.02 (50x the tuned 4.05e-4) and
+  (b) weight_decay never reached the orthogonalised group, so the arm labelled
+  "+ wd" decayed only the fallback. Both fixed (fallback_lr, decoupled decay in
+  _step_muon, --muon_lr -> cfg.muon_lr) and unit-tested.
+
+5. NEXT, RUNNING IN PARALLEL FROM SEPARATE WORKTREES (jobs 3044-3067)
+---------------------------------------------------------------------
+  track wd   /nfs/home/kfedorin/wt/wd    9 cells @50M  decay curve at 5e-4 and
+                                                     8e-3, plus coupled-L2 2e-4
+                                                     to test magnitude-vs-mechanism
+  track muon /nfs/home/kfedorin/wt/muon  9 cells @50M  Muon with the fixed
+                                                     fallback: lr 5e-3, 2e-2, 2e-2+wd
+  track long /nfs/home/kfedorin/wt/long  6 cells @250M adam vs adamw at the
+                                                     campaign's headline budget
+
+Submitted per track with scripts/submit_track.py (skips cells whose config.json
+already exists). Code state: branch exp/optim-patch, commit e5dc896 on the
+cluster; the same files are mirrored to this repo's optim/ directory.
+
+6. REPRODUCTION
+---------------
+  python3 optim/submit_track.py {wd,muon,long}
+  python3 optim/agg_optim.py <root>/train_dir ... --ref <arm> --out table.txt
+  python3 -m models.train --rnn_type gru --optimizer adamw --weight_decay 1.96e-3
+                          --learning_rate 4.05e-4 --train_for_env_steps 50000000
+                          --seed 41 --experiment <name>
+Every result row must be traceable to a config.json recording optimizer, weight
+decay, lr, eps, and cfg._optimizer_patch (which learner.py build was rewritten).
